@@ -1,0 +1,14 @@
+pandas
+numpy
+scikit-learn
+psycopg[binary]
+sqlalchemy
+python-dotenv
+fastapi
+uvicorn[standard]
+pytest
+pyjwt
+bcrypt
+reportlab
+statsmodels
+requests

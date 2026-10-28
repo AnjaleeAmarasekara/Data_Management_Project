@@ -1,0 +1,22 @@
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: coldsense-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: coldsense
+      POSTGRES_PASSWORD: coldsense
+      POSTGRES_DB: coldsense_dq
+    ports:
+      - "5432:5432"
+    volumes:
+      - coldsense_pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coldsense -d coldsense_dq"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  coldsense_pgdata:
