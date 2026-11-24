@@ -1,8 +1,9 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { AppUser, ApiService } from '../shared/api.service';
+import { ApiService, AppUser, AuditEntry } from '../shared/api.service';
 import { AuthService, ROLES, ROLE_LABELS, Role } from '../shared/auth.service';
+import { fmtTs } from '../shared/format';
 
 @Component({
   selector: 'app-users',
@@ -55,6 +56,29 @@ import { AuthService, ROLES, ROLE_LABELS, Role } from '../shared/auth.service';
         <button type="submit" class="primary" [disabled]="creating()">{{ creating() ? 'Creating...' : 'Create account' }}</button>
       </form>
     </section>
+
+    <section class="card" style="margin-top: 14px">
+      <h2>Audit log</h2>
+      <p class="subtle">Who did what: logins (including failed attempts), account and role changes, alert acknowledgements and fault-injection demo runs. Most recent first.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>When (UTC)</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead>
+          <tbody>
+            @for (a of audit(); track a.id) {
+              <tr>
+                <td>{{ fmt(a.occurred_at) }}</td>
+                <td>{{ a.actor || '—' }}</td>
+                <td><span class="pill" [class]="actionClass(a.action)">{{ a.action }}</span></td>
+                <td>{{ a.target || '—' }}</td>
+                <td class="subtle">{{ a.detail || '' }}</td>
+              </tr>
+            } @empty {
+              <tr><td colspan="5" class="subtle">No activity recorded yet.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
   `,
   styles: [`input, select { font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; }`],
 })
@@ -64,6 +88,7 @@ export class UsersPage implements OnInit {
   readonly roles = ROLES;
 
   users = signal<AppUser[]>([]);
+  audit = signal<AuditEntry[]>([]);
   error = signal<string | null>(null);
   creating = signal(false);
   me = this.auth.user;
@@ -74,7 +99,18 @@ export class UsersPage implements OnInit {
     this.load();
   }
 
+  fmt(ts: string) {
+    return fmtTs(ts);
+  }
+
+  actionClass(action: string) {
+    if (action === 'login_failed' || action === 'account_disabled') return 'warning';
+    if (action === 'role_changed' || action === 'user_created') return 'watch';
+    return 'ok';
+  }
+
   load() {
+    this.api.auditLog().subscribe({ next: (a) => this.audit.set(a), error: () => {} });
     this.api.users().subscribe({
       next: (u) => this.users.set(u),
       error: () => this.error.set('Could not load users.'),

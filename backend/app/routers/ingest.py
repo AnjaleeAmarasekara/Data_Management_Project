@@ -20,18 +20,19 @@ distinct from judging whether accepted data is trustworthy (see backend/app/rout
 security.py and dq_engine/checks/integrity.py for the data-tampering half).
 """
 
-import os
+import hmac
+import math
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
-from analytics.config import UNITS
 from backend.app.db import connect
+from backend.app.settings import require_secret
 
 router = APIRouter(tags=["ingest"])
 
-DEVICE_API_KEY = os.environ.get("DEVICE_API_KEY", "dev-only-device-key-change-me")
+DEVICE_API_KEY = require_secret("DEVICE_API_KEY")
 
 
 class ReadingIn(BaseModel):
@@ -39,6 +40,17 @@ class ReadingIn(BaseModel):
     temp: float
     humidity: float | None = None
     ts: datetime | None = None  # server stamps it on arrival if the device has no synced clock
+
+    @field_validator("temp", "humidity")
+    @classmethod
+    def must_be_a_number(cls, v):
+        # NaN and infinity are not readings at all, so they are rejected here as a
+        # structural error. A finite but implausible value (999 C) is deliberately
+        # accepted: judging plausibility is the quality layer's job, and rejecting it at
+        # the door would hide the very fault the system exists to detect and score.
+        if v is not None and not math.isfinite(v):
+            raise ValueError("must be a finite number")
+        return v
 
 
 class BatchIn(BaseModel):
@@ -55,16 +67,55 @@ def _log_security_event(conn, event_type: str, device_id: str | None, detail: st
 
 
 def _check_device_key(conn, x_device_key: str | None) -> None:
-    if x_device_key != DEVICE_API_KEY:
+    # constant-time comparison, so response timing reveals nothing about how much of a
+    # guessed key was right
+    if not hmac.compare_digest((x_device_key or "").encode(), DEVICE_API_KEY.encode()):
         _log_security_event(conn, "auth_failed", None, "invalid or missing X-Device-Key")
         raise HTTPException(401, "Invalid or missing device key")
 
 
-def _validate(conn, r: ReadingIn) -> tuple:
-    if r.device_id not in UNITS:
-        _log_security_event(conn, "unknown_device", r.device_id, "push attempted from an unregistered device_id")
-        raise HTTPException(404, f"Unknown device_id '{r.device_id}' -- not a registered cold-storage unit")
-    return (r.device_id, r.ts or datetime.now(timezone.utc), r.temp, r.humidity)
+def _registered(conn, device_ids: set[str]) -> set[str]:
+    """The device registry is the sensor_unit table, not the dashboard's demo-unit config.
+    Checking the config here once meant every channel outside the demo premises - 856 of
+    861 registered channels - was refused and logged as a security incident."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT device_id FROM sensor_unit WHERE device_id = ANY(%s)", (list(device_ids),))
+        return {row[0] for row in cur.fetchall()}
+
+
+def _validate(conn, readings: list[ReadingIn]) -> list[tuple]:
+    known = _registered(conn, {r.device_id for r in readings})
+    for r in readings:
+        if r.device_id not in known:
+            _log_security_event(conn, "unknown_device", r.device_id, "push attempted from an unregistered device_id")
+            raise HTTPException(404, f"Unknown device_id '{r.device_id}' -- not a registered sensor")
+    now = datetime.now(timezone.utc)
+    return [(r.device_id, r.ts or now, r.temp, r.humidity) for r in readings]
+
+
+# A gateway that loses its acknowledgement resends the same reading. Storing it twice would
+# double-count it in every downstream statistic, so an exact repeat - same device, time and
+# values - is a no-op. A *different* value at the same timestamp is still stored: that is a
+# genuine data-quality signal, and the timestamp-integrity check is there to flag it.
+INSERT_IDEMPOTENT = """
+    INSERT INTO sensor_reading (device_id, ts, temp, humidity)
+    SELECT %(d)s, %(ts)s, %(t)s, %(h)s
+    WHERE NOT EXISTS (
+        SELECT 1 FROM sensor_reading
+        WHERE device_id = %(d)s AND ts = %(ts)s
+          AND temp = %(t)s AND humidity IS NOT DISTINCT FROM %(h)s
+    )
+"""
+
+
+def _store(conn, rows: list[tuple]) -> int:
+    stored = 0
+    with conn.cursor() as cur:
+        for d, ts, t, h in rows:
+            cur.execute(INSERT_IDEMPOTENT, {"d": d, "ts": ts, "t": t, "h": h})
+            stored += cur.rowcount
+    conn.commit()
+    return stored
 
 
 @router.post("/ingest/readings", status_code=201)
@@ -72,11 +123,9 @@ def ingest_reading(reading: ReadingIn, x_device_key: str | None = Header(default
     """Single reading, the common case: a sensor with a live connection pushing as it samples."""
     with connect() as conn:
         _check_device_key(conn, x_device_key)
-        row = _validate(conn, reading)
-        with conn.cursor() as cur:
-            cur.execute("INSERT INTO sensor_reading (device_id, ts, temp, humidity) VALUES (%s, %s, %s, %s)", row)
-        conn.commit()
-    return {"accepted": True, "device_id": row[0], "ts": row[1].isoformat()}
+        rows = _validate(conn, [reading])
+        stored = _store(conn, rows)
+    return {"accepted": True, "duplicate": stored == 0, "device_id": rows[0][0], "ts": rows[0][1].isoformat()}
 
 
 @router.post("/ingest/readings/batch", status_code=201)
@@ -87,8 +136,6 @@ def ingest_batch(batch: BatchIn, x_device_key: str | None = Header(default=None)
         _check_device_key(conn, x_device_key)
         if not batch.readings:
             raise HTTPException(400, "readings must not be empty")
-        rows = [_validate(conn, r) for r in batch.readings]
-        with conn.cursor() as cur:
-            cur.executemany("INSERT INTO sensor_reading (device_id, ts, temp, humidity) VALUES (%s, %s, %s, %s)", rows)
-        conn.commit()
-    return {"accepted": len(rows)}
+        rows = _validate(conn, batch.readings)
+        stored = _store(conn, rows)
+    return {"accepted": len(rows), "stored": stored, "duplicates": len(rows) - stored}

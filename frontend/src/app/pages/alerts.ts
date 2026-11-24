@@ -5,7 +5,12 @@ import { Alert, ApiService } from '../shared/api.service';
 import { AuthService } from '../shared/auth.service';
 import { downloadCsv, fmtTs } from '../shared/format';
 
-const KIND_TEXT: Record<string, string> = { excursion: 'Safe-limit excursion', isolation_forest: 'Anomaly (early warning)' };
+const KIND_TEXT: Record<string, string> = {
+  excursion: 'Too warm (safe-limit excursion)',
+  cold_excursion: 'Too cold (freezing risk)',
+  sensor_silent: 'Sensor silent (no data)',
+  isolation_forest: 'Anomaly (early warning)',
+};
 
 @Component({
   selector: 'app-alerts',
@@ -51,7 +56,7 @@ const KIND_TEXT: Record<string, string> = { excursion: 'Safe-limit excursion', i
           <thead>
             <tr>
               <th>Severity</th><th>Unit</th><th>Type</th><th>Started (UTC)</th>
-              <th class="num">Duration (min)</th><th class="num">Peak (&deg;C)</th><th class="num">Data trust</th>
+              <th class="num">Duration (min)</th><th class="num">Extreme (&deg;C)</th><th class="num">Data trust</th>
               @if (auth.hasRole('quality_supervisor')) { <th>Acknowledgement</th> }
             </tr>
           </thead>

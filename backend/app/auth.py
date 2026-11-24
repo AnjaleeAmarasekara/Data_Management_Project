@@ -7,7 +7,6 @@ everything a Quality Supervisor can, an Admin can do everything an Operations Ma
 can, plus manage accounts.
 """
 
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
@@ -18,8 +17,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from backend.app.db import connect
+from backend.app.settings import require_secret
 
-SECRET_KEY = os.environ.get("JWT_SECRET", "dev-only-secret-change-me")
+# No fallback: a missing or placeholder signing key stops the API at startup rather than
+# signing tokens with a string committed to the repository (see backend/app/settings.py).
+SECRET_KEY = require_secret("JWT_SECRET")
 ALGORITHM = "HS256"
 TOKEN_TTL_HOURS = 12
 

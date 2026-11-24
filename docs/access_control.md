@@ -34,6 +34,24 @@ self-service registration -- accounts are created by an Administrator via User
 Management, matching how access is actually provisioned in a real SME (IT/ops sets up
 accounts, staff don't sign themselves up).
 
+**Brute-force protection.** After 5 failed sign-ins for one email within 15 minutes,
+further attempts are refused with HTTP 429 without the password even being checked. The
+count is read from the audit log, so it survives an API restart and needs no extra table,
+and a successful sign-in resets it. An unknown email is checked against a dummy bcrypt
+hash, so it takes as long as a wrong password and the response time does not reveal which
+emails have accounts.
+
+**Secrets fail closed.** `JWT_SECRET` and `DEVICE_API_KEY` used to fall back to hardcoded
+values when unset. Those values were committed to the repository, so a deployment that
+forgot to set them would sign tokens with a public string - enough to forge an
+administrator token. The API now refuses to start if either is missing, shorter than 32
+characters, or still a template placeholder (`backend/app/settings.py`).
+
+The device key had a second problem: the value in `.env.example` was a real-looking key,
+committed in the first commit, and the live `.env` was using that same value. It has been
+rotated and the template now holds a placeholder. Rotation, not history rewriting, is the
+remedy: the old key is still in git history but no longer opens anything.
+
 ## Demo accounts
 
 Seeded by `backend/seed_users.py`, password `ColdSense#2025` for all four:
@@ -49,7 +67,7 @@ Seeded by `backend/seed_users.py`, password `ColdSense#2025` for all four:
 
 - No password reset flow (an Administrator would reset it by editing the account; that
   UI isn't built).
-- No audit log beyond alert acknowledgements (who ran the fault-injection demo, who
-  changed a role, etc. isn't recorded).
-- The JWT secret (`JWT_SECRET` in `.env`) defaults to a dev value if unset -- fine for a
-  local demo, not for a real deployment.
+- The lockout is per email, not per source address, so it slows a targeted guess but not a
+  spray of one password across many accounts.
+- Device authentication is one shared key for the whole fleet. A real deployment would
+  issue a key per device, so one compromised gateway could be revoked alone.

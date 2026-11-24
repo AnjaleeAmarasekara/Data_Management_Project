@@ -5,10 +5,10 @@ import { FormsModule } from '@angular/forms';
 import { ApiService, Report, UnitState } from '../shared/api.service';
 import { fmtTs } from '../shared/format';
 
-// The demo dataset runs 2020-07-12 to 2020-07-20 (see docs/data_linkage.md); default the
+// The refrigerator record runs 2017-08-01 to 2017-08-06 (see docs/data_linkage.md); default the
 // range to it so the first preview shows real data instead of an empty "no data" report.
-const DEFAULT_START = '2020-07-12T00:00';
-const DEFAULT_END = '2020-07-20T00:00';
+const DEFAULT_START = '2017-08-01T00:00';
+const DEFAULT_END = '2017-08-07T00:00';
 
 @Component({
   selector: 'app-reports',

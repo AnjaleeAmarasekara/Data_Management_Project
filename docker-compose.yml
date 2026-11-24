@@ -12,6 +12,7 @@ services:
     volumes:
       - coldsense_pgdata:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./db/migrations/001_unit_registry.sql:/docker-entrypoint-initdb.d/zz_001_unit_registry.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U coldsense -d coldsense_dq"]
       interval: 5s

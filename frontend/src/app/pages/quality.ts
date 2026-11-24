@@ -2,7 +2,7 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { ChartConfiguration } from 'chart.js';
 
-import { ApiService, FaultName, Flags, InjectResult, Point, SecurityEvents, TimelineItem, UnitQuality } from '../shared/api.service';
+import { ApiService, FaultName, Flags, InjectResult, NetworkSummary, Point, QualityEvaluation, SecurityEvents, TimelineItem, UnitQuality } from '../shared/api.service';
 import { AuthService } from '../shared/auth.service';
 import { ChartComponent } from '../shared/chart';
 import { fmtTs } from '../shared/format';
@@ -17,6 +17,7 @@ const FAULTS: { name: FaultName; label: string }[] = [
   { name: 'calibration_bias_extreme', label: 'Calibration error (gross)' },
   { name: 'replay_attack', label: 'Replay attack' },
   { name: 'data_injection', label: 'Data injection attack' },
+  { name: 'sensor_silent', label: 'Sensor goes silent' },
 ];
 
 @Component({
@@ -27,7 +28,7 @@ const FAULTS: { name: FaultName; label: string }[] = [
       <div>
         <h1>Data Quality</h1>
         <p class="subtle">
-          Every 30-minute window of sensor data is scored before analytics is allowed to use it.
+          Every 2-hour window of sensor data is scored before analytics is allowed to use it.
           High &ge; 85, Medium &ge; 60, Low below that.
         </p>
       </div>
@@ -38,7 +39,7 @@ const FAULTS: { name: FaultName; label: string }[] = [
     <div class="grid cols-3">
       @for (u of summary(); track u.device_id) {
         <article class="card">
-          <div class="row">
+          <div class="row nowrap">
             <strong>{{ u.unit_name }}</strong>
             <span class="spacer"></span>
             <span class="subtle">avg trust</span>
@@ -85,9 +86,9 @@ const FAULTS: { name: FaultName; label: string }[] = [
     </section>
 
     <section class="card" style="margin-top: 14px">
-      <h2>Fault injection demo</h2>
+      <h2>Fault injection test</h2>
       <p class="subtle">
-        Takes a known-clean 30-minute window of real data, corrupts a copy in memory with a synthetic fault, and runs the
+        Takes a known-clean 2-hour window of real data, corrupts a copy in memory with a synthetic fault, and runs the
         real quality layer on both. Nothing is written to the database.
       </p>
 
@@ -150,14 +151,193 @@ const FAULTS: { name: FaultName; label: string }[] = [
       }
     </section>
 
+    @if (network(); as net) {
+      <section class="card" style="margin-top: 14px">
+        <h2>Across the network</h2>
+        <p class="subtle">
+          {{ net.totals.readings | number }} readings from {{ net.totals.channels | number }} sensor channels across
+          {{ net.totals.sites | number }} premises, in {{ net.totals.windows | number }} scored windows.
+          {{ net.totals.silent_channels }} sensors and {{ net.totals.silent_premises }} premises are silent right now
+          (no reading for over {{ net.silence_threshold_min }} min). Weakest premises first.
+        </p>
+        <details class="about">
+          <summary>How to read this</summary>
+          <div>
+            The quality layer scores every instrumented premises, not only the demo one above. Each premises has
+            {{ net.totals.cold_units | number }} cold units in total, plus a product probe and an ambient sensor, and all
+            of them are scored. Forecasting and business impact run on the demo premises only; scoring runs on all of
+            them, which is what makes the figures here a measurement rather than a claim.
+          </div>
+        </details>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Premises</th><th class="num">Units</th><th class="num">Windows</th>
+                <th class="num">Avg trust</th><th class="num">Low</th><th class="num">Possible tampering</th>
+                <th class="num">Silent sensors</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (s of networkTop(); track s.site_id) {
+                <tr>
+                  <td>{{ s.site_name }}</td>
+                  <td class="num">{{ s.units }}</td>
+                  <td class="num">{{ s.windows | number }}</td>
+                  <td class="num"><strong>{{ s.avg_trust | number: '1.1-1' }}</strong></td>
+                  <td class="num">{{ s.low_windows }}</td>
+                  <td class="num">{{ s.integrity_windows }}</td>
+                  <td class="num">
+                    @if (s.premises_silent) { <span class="pill Low">whole premises</span> }
+                    @else { {{ s.silent_channels }} }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <p class="subtle" style="margin-top: 8px">Showing the {{ networkTop().length }} weakest of {{ net.sites.length }} premises.</p>
+      </section>
+    }
+
+    @if (evaluation(); as ev) {
+      <section class="card" style="margin-top: 14px">
+        <h2>How accurate is this quality layer?</h2>
+        <p class="subtle">
+          Known faults are injected into windows that scored clean, and the same scoring code used everywhere else
+          decides whether each one is caught.
+        </p>
+        <details class="about">
+          <summary>Why it is measured this way</summary>
+          <div>
+            Real sensor data carries no record of which windows were faulty, so there is nothing to check the layer
+            against directly. Injecting faults of known type and position gives a ground truth. Every outcome then
+            falls into one of four boxes, which is what the measures below are computed from.
+          </div>
+        </details>
+        <div class="grid cols-4" style="margin-top: 12px">
+          <div class="card"><div class="kpi-label">Precision</div>
+            <div class="big">{{ ev.overall.precision | number: '1.2-2' }}</div>
+            <p class="subtle">Of the flags raised, how many were real faults</p></div>
+          <div class="card"><div class="kpi-label">Recall</div>
+            <div class="big">{{ ev.overall.recall | number: '1.2-2' }}</div>
+            <p class="subtle">Of the faults present, how many were caught</p></div>
+          <div class="card"><div class="kpi-label">F1 score</div>
+            <div class="big">{{ ev.overall.f1 | number: '1.2-2' }}</div>
+            <p class="subtle">Both together: high only when neither is sacrificed</p></div>
+          <div class="card"><div class="kpi-label">Accuracy</div>
+            <div class="big">{{ ev.overall.accuracy | number: '1.2-2' }}</div>
+            <p class="subtle">Correct calls overall, on an even mix of faulty and real windows</p></div>
+        </div>
+
+        <div class="grid cols-2" style="margin-top: 14px">
+          <div>
+            <h3 style="margin: 0 0 8px">Confusion matrix</h3>
+            <div class="table-wrap">
+              <table class="confusion">
+                <thead><tr><th></th><th class="num">Flag raised</th><th class="num">No flag</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <th>Fault injected</th>
+                    <td class="num hit"><strong>{{ ev.overall.tp | number }}</strong><span class="cell-note">caught</span></td>
+                    <td class="num miss">{{ ev.overall.fn | number }}<span class="cell-note">missed</span></td>
+                  </tr>
+                  <tr>
+                    <th>Real window, untouched</th>
+                    <td class="num miss">{{ ev.overall.fp | number }}<span class="cell-note">false alarm</span></td>
+                    <td class="num hit"><strong>{{ ev.overall.tn | number }}</strong><span class="cell-note">left alone</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="subtle" style="margin-top: 8px">
+              {{ ev.sample.positive_windows_per_fault | number }} clean windows &times; {{ ev.per_fault.length }} fault types,
+              against {{ ev.sample.negative_windows | number }} untouched real windows.
+            </p>
+          </div>
+          <div>
+            <h3 style="margin: 0 0 8px">Per check</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Check</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th></tr></thead>
+                <tbody>
+                  @for (c of ev.per_check; track c.check) {
+                    <tr>
+                      <td>{{ c.check }}</td>
+                      <td class="num">{{ c.precision | number: '1.2-2' }}</td>
+                      <td class="num">{{ c.recall | number: '1.2-2' }}</td>
+                      <td class="num"><strong>{{ c.f1 | number: '1.2-2' }}</strong></td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            <p class="subtle" style="margin-top: 8px">
+              Tampering scores lowest on recall because replay detection is deliberately switched off in the
+              vegetable drawer, where produce holds the temperature so steady that repeated readings are normal.
+            </p>
+          </div>
+        </div>
+
+        <h3 style="margin: 16px 0 8px">Detection rate per fault type</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Injected fault</th><th>Check expected to catch it</th><th class="num">Windows tested</th><th class="num">Detection rate</th><th></th></tr></thead>
+            <tbody>
+              @for (f of ev.per_fault; track f.fault) {
+                <tr>
+                  <td>{{ f.fault }}</td>
+                  <td class="subtle">{{ f.expected_check || 'none — see note below' }}</td>
+                  <td class="num">{{ f.windows | number }}</td>
+                  <td class="num"><strong>{{ f.recall * 100 | number: '1.0-1' }}%</strong></td>
+                  <td>
+                    @if (f.recall >= 0.99) { <span class="pill ok">detected</span> }
+                    @else if (f.recall > 0) { <span class="pill warning">partly detected</span> }
+                    @else { <span class="pill critical">not detected</span> }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <p class="subtle" style="margin-top: 12px">
+          A check flag fires on {{ ev.false_alarm_rate.rate * 100 | number: '1.0-1' }}% of real windows, but only
+          {{ ev.false_alarm_rate_label_level.rate * 100 | number: '1.0-1' }}% drop below High: most flags are a single stray
+          reading that is excluded while the window stays trusted.
+        </p>
+        <details class="about">
+          <summary>Why the two figures differ</summary>
+          <div>
+            A flag fired on {{ ev.false_alarm_rate.flagged }} of {{ ev.false_alarm_rate.of }} real windows, but only
+            {{ ev.false_alarm_rate_label_level.flagged }} of {{ ev.false_alarm_rate_label_level.of }} fell below High. The real
+            windows were not filtered for cleanliness first, so some are genuinely faulty and the false-alarm rate is an
+            upper bound. Judged on the label alone, recall is {{ ev.label_level.recall | number: '1.2-2' }} with precision
+            {{ ev.label_level.precision | number: '1.2-2' }}: an isolated fault is removed rather than alarmed.
+          </div>
+        </details>
+
+        <p class="subtle" style="margin-top: 10px">
+          A subtle calibration offset has no check to catch it: a steady in-range shift looks like a warmer unit to one sensor.
+          Measured {{ fmtTime(ev.generated_at) }}.
+          <code>python -m dq_engine.evaluation.evaluate_quality</code> reproduces it.
+        </p>
+      </section>
+    }
+
     @if (auth.hasRole('quality_supervisor')) {
       <section class="card" style="margin-top: 14px">
         <h2>Ingestion Security</h2>
         <p class="subtle">
-          Unauthorized attempts to push data into the ingestion API &mdash; a wrong or missing device key, or a push
-          from a device_id that isn't a registered cold-storage unit. This is distinct from data-quality flags: it's
-          about who tried to get in, not whether accepted data can be trusted.
+          Rejected attempts to push data: a wrong or missing device key, or a device that is not registered.
         </p>
+        <details class="about">
+          <summary>How this differs from a quality flag</summary>
+          <div>
+            A quality flag asks whether data that was accepted can be trusted. This panel is about who tried to get
+            in at all, before any reading is stored.
+          </div>
+        </details>
         @if (security(); as sec) {
           <div class="row" style="margin-bottom: 10px">
             <span class="pill" [class]="sec.total ? 'warning' : 'ok'">{{ sec.total }} event(s) in last 24h</span>
@@ -187,7 +367,12 @@ const FAULTS: { name: FaultName; label: string }[] = [
     }
   `,
   styles: [`
-    .stackbar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #e8ecf2; }
+    table.confusion th { font-weight: 600; color: var(--muted); }
+    table.confusion td { font-size: 22px; font-variant-numeric: tabular-nums; vertical-align: middle; }
+    table.confusion td.hit { background: var(--ok-bg); color: var(--ok); }
+    table.confusion td.miss { background: var(--warn-bg); color: var(--warn); }
+    .cell-note { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.75; }
+    .stackbar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--border); }
     .seg-High { background: var(--ok); }
     .seg-Medium { background: #d99a0b; }
     .seg-Low { background: var(--crit); }
@@ -211,6 +396,9 @@ export class QualityPage implements OnInit {
   result = signal<InjectResult | null>(null);
   running = signal(false);
   security = signal<SecurityEvents | null>(null);
+  network = signal<NetworkSummary | null>(null);
+  evaluation = signal<QualityEvaluation | null>(null);
+  networkTop = computed(() => (this.network()?.sites ?? []).slice(0, 12));
 
   timelineChart = computed<ChartConfiguration | null>(() => {
     const t = this.timeline();
@@ -220,7 +408,7 @@ export class QualityPage implements OnInit {
       data: {
         labels: t.map((w) => fmtTs(w.window_start)),
         datasets: [
-          { label: 'Trust score', data: t.map((w) => w.trust), borderColor: '#0b63b6', backgroundColor: '#0b63b6', borderWidth: 1.5, pointRadius: 0, tension: 0.1 },
+          { label: 'Trust score', data: t.map((w) => w.trust), borderColor: '#0f766e', backgroundColor: '#0f766e', borderWidth: 1.5, pointRadius: 0, tension: 0.1 },
           { label: 'High threshold (85)', data: t.map(() => 85), borderColor: '#14743f', borderDash: [6, 4], borderWidth: 1, pointRadius: 0 },
           { label: 'Medium threshold (60)', data: t.map(() => 60), borderColor: '#b3261e', borderDash: [6, 4], borderWidth: 1, pointRadius: 0 },
         ],
@@ -250,7 +438,7 @@ export class QualityPage implements OnInit {
       data: {
         datasets: [
           { label: 'Before (clean)', data: xy(r.before.points), borderColor: '#a3adbd', borderWidth: 1.4, pointRadius: 0 },
-          { label: 'After fault', data: xy(r.after.points), borderColor: '#0b63b6', borderWidth: 1.4, pointRadius: 0 },
+          { label: 'After fault', data: xy(r.after.points), borderColor: '#0f766e', borderWidth: 1.4, pointRadius: 0 },
           { label: 'Flagged by quality layer', data: xy(flaggedPts), showLine: false, borderColor: '#b3261e', backgroundColor: '#b3261e', pointStyle: 'triangle', pointRadius: 5 },
         ],
       },
@@ -280,6 +468,10 @@ export class QualityPage implements OnInit {
       },
       error: () => this.error.set('Cannot reach the API at localhost:8000. Start the backend (see README).'),
     });
+
+    this.api.qualityNetwork().subscribe({ next: (n) => this.network.set(n), error: () => {} });
+    // Absent until the evaluation has been run at least once; the section simply does not appear.
+    this.api.qualityEvaluation().subscribe({ next: (e) => this.evaluation.set(e), error: () => {} });
 
     if (this.auth.hasRole('quality_supervisor')) {
       this.api.securityEvents().subscribe({ next: (sec) => this.security.set(sec), error: () => {} });

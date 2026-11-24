@@ -7,7 +7,13 @@ import { Alert, ApiService, Flags, Readings, UnitState } from '../shared/api.ser
 import { ChartComponent } from '../shared/chart';
 import { fmtTs } from '../shared/format';
 
-const STATUS_TEXT: Record<string, string> = { ok: 'Normal', warning: 'Warning', critical: 'Critical', no_data: 'No data' };
+const STATUS_TEXT: Record<string, string> = {
+  ok: 'Normal',
+  warning: 'Warning',
+  critical: 'Critical',
+  no_data: 'Awaiting data',
+  warming_up: 'Warming up',
+};
 const RANGES = [
   { hours: 2, label: '2 h' },
   { hours: 6, label: '6 h' },
@@ -37,6 +43,8 @@ const RANGES = [
         <article
           class="card unit"
           [class.selected]="u.device_id === selected()"
+          [class.is-critical]="u.status === 'critical'"
+          [class.is-warning]="u.status === 'warning'"
           tabindex="0"
           (click)="select(u.device_id)"
           (keydown.enter)="select(u.device_id)"
@@ -47,13 +55,57 @@ const RANGES = [
             <span class="spacer"></span>
             <span class="pill" [class]="u.status">{{ statusText(u.status) }}</span>
           </div>
+          @if (u.clock === 'wall') {
+            <p class="live-tag" title="Silence is judged against the real clock, not against the replayed record">Live probe &middot; {{ u.device_id }}</p>
+          }
+
+          @if (u.status === 'no_data') {
+            <p class="subtle meta" style="margin-top: 10px">
+              Registered. No reading has arrived yet; the card goes live with the probe's first push.
+            </p>
+          }
 
           @if (u.latest; as l) {
             <div class="row" style="align-items: baseline; margin: 10px 0 2px">
               <span class="big">{{ l.temp_c | number: '1.1-1' }}&deg;C</span>
-              <span class="subtle">{{ l.humidity | number: '1.0-0' }}% RH</span>
+              @if (l.humidity !== null) { <span class="subtle">{{ l.humidity | number: '1.0-0' }}% RH</span> }
             </div>
-            <p class="subtle">Setpoint {{ u.setpoint_c }}&deg;C &middot; safe limit {{ u.max_safe_c }}&deg;C &middot; {{ u.categories.join(', ') }}</p>
+            <p class="subtle meta">
+              Setpoint {{ u.setpoint_c }}&deg;C &middot; safe band
+              @if (u.min_safe_c !== null && u.min_safe_c !== undefined) { {{ u.min_safe_c }}&deg;C to }
+              {{ u.max_safe_c }}&deg;C
+            </p>
+            <p class="cats">{{ u.categories.join(', ') }}</p>
+            @if (u.breach === 'too_warm') {
+              <div class="breach">
+                <strong>{{ outsideBandBy(u) | number: '1.1-1' }}&deg;C above the safe limit</strong>
+                <span>Spoilage risk grows with time spent above it.</span>
+              </div>
+            }
+            @if (u.breach === 'too_cold') {
+              <div class="breach">
+                <strong>{{ outsideBandBy(u) | number: '1.1-1' }}&deg;C below the safe band</strong>
+                <span>Chilled stock can freeze and be ruined.</span>
+              </div>
+            }
+            @if (u.warmup; as w) {
+              <div class="settling">
+                <strong>Settling: {{ w.remaining_min | number: '1.0-0' }} of {{ w.warmup_min }} min left</strong>
+                <span>A newly fitted probe starts at room temperature. Safe limits are enforced once it has settled; silence is reported straight away.</span>
+              </div>
+            }
+            @if (u.breach === 'silent') {
+              <div class="breach">
+                <strong>No readings for {{ u.connectivity?.silent_for_min | number: '1.0-0' }} min</strong>
+                <span>The rest of this premises is reporting, so the sensor or its battery has likely failed. The temperature shown is the last one received.</span>
+              </div>
+            }
+            @if (u.breach === 'premises_silent') {
+              <div class="breach">
+                <strong>Whole premises silent for {{ u.connectivity?.premises_silent_for_min | number: '1.0-0' }} min</strong>
+                <span>Check the gateway, network or power. The temperature shown is the last one received.</span>
+              </div>
+            }
           }
 
           @if (u.trust; as t) {
@@ -74,10 +126,14 @@ const RANGES = [
             </div>
           }
 
-          <p class="subtle forecast">{{ forecastText(u) }}</p>
+          @if (forecastText(u); as fc) { <p class="subtle forecast">{{ fc }}</p> }
         </article>
       } @empty {
-        @if (!error()) { <div class="card subtle">Loading units&hellip;</div> }
+        @if (!error()) {
+          <div class="skeleton" aria-busy="true" aria-label="Loading units"></div>
+          <div class="skeleton"></div>
+          <div class="skeleton"></div>
+        }
       }
     </div>
 
@@ -100,7 +156,7 @@ const RANGES = [
         <app-chart [config]="c" [height]="320" />
         <p class="subtle" style="margin-top: 8px">
           Red markers are readings the data quality layer flagged as outliers or noise. They are excluded from
-          analytics rather than plotted into the line. Temperatures are mapped to each unit's setpoint (simulated).
+          analytics rather than plotted into the line. Temperatures are measured refrigeration readings, not simulated.
         </p>
       } @else {
         <p class="subtle">No readings to show.</p>
@@ -125,11 +181,14 @@ const RANGES = [
     </section>
   `,
   styles: [`
-    .unit { cursor: pointer; }
+    .unit { cursor: pointer; transition: box-shadow 160ms var(--ease), border-color 160ms var(--ease), transform 160ms var(--ease); }
+    .unit:hover { box-shadow: var(--shadow-raised); transform: translateY(-1px); }
+    .unit.is-critical { border-color: #efc4be; }
+    .unit.is-warning { border-color: #ebd5a3; }
     .unit.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
     .unit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .trust { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
-    .meter { height: 6px; background: #e8ecf2; border-radius: 4px; overflow: hidden; }
+    .meter { height: 6px; background: var(--border); border-radius: 4px; overflow: hidden; }
     .meter-fill { height: 100%; }
     .meter-fill.High { background: var(--ok); }
     .meter-fill.Medium { background: #d99a0b; }
@@ -179,6 +238,20 @@ export class MonitoringPage implements OnInit, OnDestroy {
     this.loadReadings();
   }
 
+  /** How far outside its safe band a unit is, in degrees, or null when it is inside.
+   *
+   *  The card states the magnitude because "Critical" on its own does not distinguish a unit a
+   *  tenth of a degree over from one that has stopped cooling. Null for a silent sensor: the last
+   *  reading says nothing about the temperature now, so a number there would be a false precision.
+   */
+  outsideBandBy(u: UnitState): number | null {
+    const temp = u.latest?.temp_c;
+    if (temp === undefined) return null;
+    if (u.breach === 'too_warm') return temp - u.max_safe_c;
+    if (u.breach === 'too_cold' && u.min_safe_c !== null) return u.min_safe_c - temp;
+    return null;
+  }
+
   statusText(s: string) {
     return STATUS_TEXT[s] ?? s;
   }
@@ -198,12 +271,27 @@ export class MonitoringPage implements OnInit, OnDestroy {
     return names.filter(([k]) => f[k]).map(([, label]) => label);
   }
 
+  // Wording is deliberately hedged. The walk-forward backtest (docs/ml_evaluation_arima.json)
+  // shows the forecast beats a naive "no change" baseline on three of five units, and anticipated
+  // four of fifteen excursions that began from a within-limit state. That does not support stating
+  // a predicted breach time as fact, so the text reads as a watch signal, not a promise.
+  //
+  // Returns empty for a unit already outside its band: the breach line above the trust score
+  // already says so, with the magnitude, and a forecast slot repeating it reads like a second,
+  // weaker finding rather than the same one.
   forecastText(u: UnitState): string {
     const f = u.forecast;
+    // a probe that has not reported, or is still settling, has its own message above
+    if (u.status === 'no_data' || u.status === 'warming_up') return '';
     if (!f || f.status === 'insufficient_data') return 'Forecast unavailable (not enough recent data).';
-    if (f.minutes_to_limit === 0) return 'Already above the safe limit.';
-    if (f.status === 'at_risk') return `Projected to exceed the safe limit in about ${Math.round(f.minutes_to_limit ?? 0)} min.`;
-    return `Stable: ${f.predicted_c}°C expected in ${f.horizon_min} min, no limit breach projected.`;
+    if (f.minutes_to_limit === 0) return '';
+    if (f.status === 'at_risk') {
+      const towards = f.direction === 'cold' ? 'freezing (the lower limit)' : 'the safe limit';
+      return `Trending towards ${towards} — on current trend it could be reached within ${Math.round(
+        f.minutes_to_limit ?? 0,
+      )} min. Indicative only.`;
+    }
+    return `No breach indicated in the next ${f.horizon_min} min (trend points to ${f.predicted_c}°C).`;
   }
 
   private loadUnits() {
@@ -241,8 +329,12 @@ function buildChart(r: Readings, hours: number): ChartConfiguration {
     data: {
       labels,
       datasets: [
-        { label: 'Temperature (°C)', data: r.points.map((p) => p.temp_c), borderColor: '#0b63b6', backgroundColor: '#0b63b6', borderWidth: 1.6, pointRadius: 0, tension: 0.15 },
+        { label: 'Temperature (°C)', data: r.points.map((p) => p.temp_c), borderColor: '#0f766e', backgroundColor: '#0f766e', borderWidth: 1.6, pointRadius: 0, tension: 0.15 },
         { label: `Safe limit (${r.max_safe_c}°C)`, data: r.points.map(() => r.max_safe_c ?? null), borderColor: '#b3261e', borderDash: [6, 4], borderWidth: 1.2, pointRadius: 0 },
+        // the lower bound matters too: below it, chilled stock freezes
+        ...(r.min_safe_c !== null && r.min_safe_c !== undefined
+          ? [{ label: `Lower limit (${r.min_safe_c}°C)`, data: r.points.map(() => r.min_safe_c ?? null), borderColor: '#2b6cb0', borderDash: [2, 4], borderWidth: 1.2, pointRadius: 0 }]
+          : []),
         { label: 'Flagged by quality layer', data: flagged, showLine: false, borderColor: '#b3261e', backgroundColor: '#b3261e', pointStyle: 'triangle', pointRadius: 5 },
       ],
     },

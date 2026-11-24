@@ -13,8 +13,9 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from analytics.config import UNITS
+from analytics.registry import load_units, unit_names
 from backend.app.db import connect
+from backend.app.routers.alerts import LABELS
 
 router = APIRouter(tags=["reports"])
 
@@ -33,7 +34,8 @@ def _relative_day_range(conn, start: datetime, end: datetime) -> tuple[int, int]
 
 
 def gather_report(conn, start: datetime, end: datetime, device_ids: list[str] | None) -> dict:
-    ids = device_ids or list(UNITS.keys())
+    ids = device_ids or list(load_units(conn).keys())
+    names = unit_names(conn)
     d0, d1 = _relative_day_range(conn, start, end)
 
     with conn.cursor() as cur:
@@ -62,7 +64,7 @@ def gather_report(conn, start: datetime, end: datetime, device_ids: list[str] | 
         )
         alerts = [
             {
-                "device_id": r[0], "unit_name": UNITS[r[0]].name, "kind": r[1], "severity": r[2],
+                "device_id": r[0], "unit_name": names.get(r[0], r[0]), "kind": r[1], "severity": r[2],
                 "start_ts": r[3].isoformat(), "minutes": r[4], "peak_temp_c": r[5],
                 "avg_trust": float(r[6]) if r[6] is not None else None,
             }
@@ -81,7 +83,7 @@ def gather_report(conn, start: datetime, end: datetime, device_ids: list[str] | 
         )
         impact = [
             {
-                "device_id": r[0], "unit_name": UNITS[r[0]].name, "relative_day": r[1], "categories": r[2],
+                "device_id": r[0], "unit_name": names.get(r[0], r[0]), "relative_day": r[1], "categories": r[2],
                 "sales_exposed": float(r[3]), "excursion_minutes": r[4], "spoilage_probability": r[5],
                 "revenue_at_risk": float(r[6]), "avg_trust": float(r[7]),
             }
@@ -89,7 +91,7 @@ def gather_report(conn, start: datetime, end: datetime, device_ids: list[str] | 
         ]
 
     units_out = [
-        {"device_id": i, "unit_name": UNITS[i].name, **quality.get(i, {"windows": 0, "avg_trust": None, "high": 0, "medium": 0, "low": 0})}
+        {"device_id": i, "unit_name": names.get(i, i), **quality.get(i, {"windows": 0, "avg_trust": None, "high": 0, "medium": 0, "low": 0})}
         for i in ids
     ]
     return {
@@ -144,9 +146,9 @@ def report_pdf(start: datetime, end: datetime, device_id: list[str] | None = Que
         q_rows.append([u["unit_name"], u["windows"], u["avg_trust"], u["high"], u["medium"], u["low"]])
     story += [_table(q_rows), Spacer(1, 6 * mm), Paragraph("Alerts", styles["Heading2"])]
 
-    a_rows = [["Unit", "Type", "Severity", "Started (UTC)", "Minutes", "Peak C"]]
+    a_rows = [["Unit", "Type", "Severity", "Started (UTC)", "Minutes", "Extreme C"]]
     for a in data["alerts"][:40]:
-        a_rows.append([a["unit_name"], a["kind"], a["severity"], a["start_ts"][:16].replace("T", " "), a["minutes"], a["peak_temp_c"]])
+        a_rows.append([a["unit_name"], LABELS.get(a["kind"], a["kind"]), a["severity"], a["start_ts"][:16].replace("T", " "), a["minutes"], a["peak_temp_c"]])
     story.append(_table(a_rows) if len(a_rows) > 1 else Paragraph("No alerts in range.", styles["Normal"]))
     story += [Spacer(1, 6 * mm), Paragraph("Business Impact", styles["Heading2"])]
 

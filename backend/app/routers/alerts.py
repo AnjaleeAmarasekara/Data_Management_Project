@@ -5,16 +5,37 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from analytics.config import UNITS
+from analytics.registry import unit_names
+from backend.app.audit import log_action
 from backend.app.auth import User, require_role
 from backend.app.db import connect
 
 router = APIRouter(tags=["alerts"])
 
+# One entry per event kind analytics can produce. The reports PDF reads LABELS from here
+# too, so a new kind is described in exactly one place.
+LABELS = {
+    "excursion": "Too warm",
+    "cold_excursion": "Too cold",
+    "sensor_silent": "Sensor silent",
+    "isolation_forest": "Early warning",
+}
 MESSAGES = {
     "excursion": "Temperature stayed above the safe limit for {minutes} min (peak {peak} C)",
+    # for a cold excursion the stored extreme is the coldest point reached, not a peak
+    "cold_excursion": "Temperature fell below the safe limit for {minutes} min (low {peak} C) - chilled stock can freeze",
     "isolation_forest": "Unusual temperature/humidity behaviour for {minutes} min (peak {peak} C) - early warning",
+    # for a silence the temperature is the last one received before it went quiet
+    "sensor_silent": "No readings for {minutes} min (last known {peak} C) - sensor, gateway or power may be down",
 }
+
+
+def describe(kind: str, minutes: int, extreme: float) -> str:
+    """Never let an unknown kind take the whole alerts page down. Adding cold excursions
+    without a message entry once made this endpoint return HTTP 500; an unrecognised kind
+    now degrades to a plain description instead."""
+    template = MESSAGES.get(kind, "{kind} event for {minutes} min (extreme {peak} C)")
+    return template.format(kind=kind, minutes=minutes, peak=extreme)
 
 
 @router.get("/alerts")
@@ -32,11 +53,12 @@ def list_alerts(limit: int = Query(50, ge=1, le=500)):
             (limit,),
         )
         rows = cur.fetchall()
+        names = unit_names(conn)
     return [
         {
             "id": r[0],
             "device_id": r[1],
-            "unit_name": UNITS[r[1]].name,
+            "unit_name": names.get(r[1], r[1]),
             "kind": r[2],
             "severity": r[3],
             "start_ts": r[4].isoformat(),
@@ -44,7 +66,7 @@ def list_alerts(limit: int = Query(50, ge=1, le=500)):
             "minutes": r[6],
             "peak_temp_c": r[7],
             "avg_trust": float(r[8]) if r[8] is not None else None,
-            "message": MESSAGES[r[2]].format(minutes=r[6], peak=r[7]),
+            "message": describe(r[2], r[6], r[7]),
             "acknowledged": r[9] is not None,
             "acknowledged_at": r[9].isoformat() if r[9] else None,
             "acknowledged_by": r[10],
@@ -73,6 +95,7 @@ def acknowledge_alert(alert_id: int, req: AcknowledgeRequest, user: Annotated[Us
             (alert_id, user.id, req.note),
         )
         conn.commit()
+        log_action(conn, user, "alert_acknowledged", target=f"alert #{alert_id}", detail=req.note)
     return {"acknowledged": True}
 
 
@@ -82,16 +105,18 @@ def impact():
         cur.execute(
             """
             SELECT device_id, relative_day, categories, sales_exposed, excursion_minutes, degree_minutes,
-                   peak_temp_c, spoilage_probability, revenue_at_risk, avg_trust
+                   peak_temp_c, spoilage_probability, revenue_at_risk, avg_trust,
+                   temp_basis, cold_minutes, cold_degree_minutes, low_temp_c
             FROM impact_estimate ORDER BY relative_day, device_id
             """
         )
         rows = cur.fetchall()
+        names = unit_names(conn)
 
     items = [
         {
             "device_id": r[0],
-            "unit_name": UNITS[r[0]].name,
+            "unit_name": names.get(r[0], r[0]),
             "relative_day": r[1],
             "categories": r[2],
             "sales_exposed": float(r[3]),
@@ -101,6 +126,12 @@ def impact():
             "spoilage_probability": r[7],
             "revenue_at_risk": float(r[8]),
             "avg_trust": float(r[9]),
+            # Returned explicitly: the page's "Based on" column once read a field this
+            # endpoint never sent, and silently showed "air" for every row.
+            "temp_basis": r[10],
+            "cold_minutes": r[11],
+            "cold_degree_minutes": r[12],
+            "low_temp_c": r[13],
         }
         for r in rows
     ]
