@@ -8,7 +8,7 @@ first, then each remaining minute carries the trust score of the window it belon
 import pandas as pd
 import psycopg
 
-from analytics.config import UnitConfig
+from analytics.config import STEP_MINUTES, UnitConfig
 
 DROP_REASONS = ("outlier", "noise", "integrity")
 
@@ -30,13 +30,22 @@ def load_trust_windows(conn: psycopg.Connection, device_id: str) -> pd.DataFrame
         )
         rows = cur.fetchall()
     df = pd.DataFrame(rows, columns=["window_start", "trust"])
+    # With no scored windows yet, the columns come back as object dtype and the later
+    # merge_asof fails with an unhelpful dtype error. Fix the types up front so the real
+    # problem ("scoring has not been run") surfaces as an empty trust column instead.
+    df["window_start"] = pd.to_datetime(df["window_start"], utc=True)
     df["trust"] = df["trust"].astype(float)
     return df
 
 
 def load_clean_minutely(conn: psycopg.Connection, device_id: str, cfg: UnitConfig, day_zero: pd.Timestamp) -> pd.DataFrame:
-    """Minute-mean temp/humidity with flagged readings removed, mapped onto the unit's
-    setpoint, tagged with window trust and a relative_day index."""
+    """Clean temp/humidity on the sensor's own sampling grid, with flagged readings
+    removed, tagged with window trust and a relative_day index.
+
+    The grid is the sampling interval itself (STEP_MINUTES), not one row per minute:
+    resampling to minutes would either leave four empty minutes out of five or fill them
+    by interpolation, and inventing readings is exactly what this project argues against.
+    """
     with conn.cursor() as cur:
         cur.execute("SELECT ts, temp, humidity FROM sensor_reading WHERE device_id = %s ORDER BY ts", (device_id,))
         raw = pd.DataFrame(cur.fetchall(), columns=["ts", "temp", "humidity"])
@@ -46,14 +55,15 @@ def load_clean_minutely(conn: psycopg.Connection, device_id: str, cfg: UnitConfi
 
     minutely = (
         clean.set_index("ts")[["temp", "humidity"]]
-        .resample("1min")
+        .resample(f"{STEP_MINUTES}min")
         .mean()
         .dropna(subset=["temp"])
         .reset_index()
     )
 
-    baseline = clean["temp"].median()
-    minutely["cold_temp"] = cfg.to_cold(minutely["temp"], baseline)
+    # The sensors measure refrigerated air directly, so the analytics temperature is the
+    # measured temperature. No setpoint mapping is applied.
+    minutely["cold_temp"] = minutely["temp"]
 
     trust = load_trust_windows(conn, device_id)
     minutely = pd.merge_asof(minutely.sort_values("ts"), trust, left_on="ts", right_on="window_start", direction="backward")

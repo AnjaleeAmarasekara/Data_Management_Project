@@ -1,0 +1,303 @@
+{
+  "generated_at": "2026-11-03T20:28:15.732496+00:00",
+  "method": "contamination chosen on 8 'tune' trials per case; production vs chosen then scored on 20 separate held-out trials per case.",
+  "tuning_sweep_mean_f1": {
+    "0.005": 0.015,
+    "0.01": 0.023,
+    "0.02": 0.056,
+    "0.04": 0.114
+  },
+  "chosen_contamination": 0.04,
+  "heldout": {
+    "production": {
+      "contamination": 0.005,
+      "units": {
+        "Freezer Compartment": {
+          "temp_bump": {
+            "n_trials": 20,
+            "mean_precision": 0.094,
+            "mean_recall": 0.02,
+            "mean_f1": 0.033,
+            "std_precision": 0.176,
+            "std_recall": 0.036,
+            "total_tp": 15,
+            "total_fp": 145,
+            "total_fn": 807,
+            "mean_flagged_minutes": 8.0,
+            "mean_alert_clusters": 4.0
+          },
+          "humidity_anomaly": {
+            "n_trials": 20,
+            "mean_precision": 0.031,
+            "mean_recall": 0.005,
+            "mean_f1": 0.009,
+            "std_precision": 0.096,
+            "std_recall": 0.017,
+            "total_tp": 5,
+            "total_fp": 155,
+            "total_fn": 842,
+            "mean_flagged_minutes": 8.0,
+            "mean_alert_clusters": 4.0
+          }
+        },
+        "Top Shelf Chiller": {
+          "temp_bump": {
+            "n_trials": 20,
+            "mean_precision": 0.106,
+            "mean_recall": 0.022,
+            "mean_f1": 0.036,
+            "std_precision": 0.133,
+            "std_recall": 0.032,
+            "total_tp": 17,
+            "total_fp": 143,
+            "total_fn": 788,
+            "mean_flagged_minutes": 8.0,
+            "mean_alert_clusters": 3.9
+          },
+          "humidity_anomaly": {
+            "n_trials": 20,
+            "mean_precision": 0.019,
+            "mean_recall": 0.004,
+            "mean_f1": 0.006,
+            "std_precision": 0.06,
+            "std_recall": 0.011,
+            "total_tp": 3,
+            "total_fp": 157,
+            "total_fn": 831,
+            "mean_flagged_minutes": 8.0,
+            "mean_alert_clusters": 3.9
+          }
+        },
+        "Middle Shelf Chiller": {
+          "temp_bump": {
+            "n_trials": 20,
+            "mean_precision": 0.013,
+            "mean_recall": 0.002,
+            "mean_f1": 0.004,
+            "std_precision": 0.038,
+            "std_recall": 0.007,
+            "total_tp": 2,
+            "total_fp": 158,
+            "total_fn": 842,
+            "mean_flagged_minutes": 8.0,
+            "mean_alert_clusters": 2.6
+          },
+          "humidity_anomaly": {
+            "n_trials": 20,
+            "mean_precision": 0.013,
+            "mean_recall": 0.003,
+            "mean_f1": 0.005,
+            "std_precision": 0.054,
+            "std_recall": 0.014,
+            "total_tp": 2,
+            "total_fp": 158,
+            "total_fn": 864,
+            "mean_flagged_minutes": 8.0,
+            "mean_alert_clusters": 3.0
+          }
+        },
+        "Vegetable Drawer": {
+          "temp_bump": {
+            "n_trials": 20,
+            "mean_precision": 0.019,
+            "mean_recall": 0.004,
+            "mean_f1": 0.006,
+            "std_precision": 0.082,
+            "std_recall": 0.016,
+            "total_tp": 3,
+            "total_fp": 157,
+            "total_fn": 832,
+            "mean_flagged_minutes": 8.0,
+            "mean_alert_clusters": 3.0
+          },
+          "humidity_anomaly": {
+            "n_trials": 20,
+            "mean_precision": 0.044,
+            "mean_recall": 0.007,
+            "mean_f1": 0.011,
+            "std_precision": 0.133,
+            "std_recall": 0.02,
+            "total_tp": 7,
+            "total_fp": 153,
+            "total_fn": 899,
+            "mean_flagged_minutes": 8.0,
+            "mean_alert_clusters": 3.0
+          }
+        },
+        "Door Shelf": {
+          "temp_bump": {
+            "n_trials": 20,
+            "mean_precision": 0.013,
+            "mean_recall": 0.003,
+            "mean_f1": 0.004,
+            "std_precision": 0.054,
+            "std_recall": 0.011,
+            "total_tp": 2,
+            "total_fp": 158,
+            "total_fn": 853,
+            "mean_flagged_minutes": 8.0,
+            "mean_alert_clusters": 2.0
+          },
+          "humidity_anomaly": {
+            "n_trials": 20,
+            "mean_precision": 0.106,
+            "mean_recall": 0.02,
+            "mean_f1": 0.034,
+            "std_precision": 0.225,
+            "std_recall": 0.044,
+            "total_tp": 17,
+            "total_fp": 143,
+            "total_fn": 814,
+            "mean_flagged_minutes": 8.0,
+            "mean_alert_clusters": 2.0
+          }
+        }
+      }
+    },
+    "tuned": {
+      "contamination": 0.04,
+      "units": {
+        "Freezer Compartment": {
+          "temp_bump": {
+            "n_trials": 20,
+            "mean_precision": 0.161,
+            "mean_recall": 0.231,
+            "mean_f1": 0.188,
+            "std_precision": 0.062,
+            "std_recall": 0.079,
+            "total_tp": 187,
+            "total_fp": 973,
+            "total_fn": 635,
+            "mean_flagged_minutes": 58.0,
+            "mean_alert_clusters": 16.8
+          },
+          "humidity_anomaly": {
+            "n_trials": 20,
+            "mean_precision": 0.222,
+            "mean_recall": 0.309,
+            "mean_f1": 0.257,
+            "std_precision": 0.045,
+            "std_recall": 0.073,
+            "total_tp": 258,
+            "total_fp": 902,
+            "total_fn": 589,
+            "mean_flagged_minutes": 58.0,
+            "mean_alert_clusters": 9.0
+          }
+        },
+        "Top Shelf Chiller": {
+          "temp_bump": {
+            "n_trials": 20,
+            "mean_precision": 0.122,
+            "mean_recall": 0.175,
+            "mean_f1": 0.143,
+            "std_precision": 0.054,
+            "std_recall": 0.08,
+            "total_tp": 139,
+            "total_fp": 1001,
+            "total_fn": 666,
+            "mean_flagged_minutes": 57.0,
+            "mean_alert_clusters": 17.1
+          },
+          "humidity_anomaly": {
+            "n_trials": 20,
+            "mean_precision": 0.035,
+            "mean_recall": 0.047,
+            "mean_f1": 0.04,
+            "std_precision": 0.052,
+            "std_recall": 0.069,
+            "total_tp": 40,
+            "total_fp": 1100,
+            "total_fn": 794,
+            "mean_flagged_minutes": 57.0,
+            "mean_alert_clusters": 16.2
+          }
+        },
+        "Middle Shelf Chiller": {
+          "temp_bump": {
+            "n_trials": 20,
+            "mean_precision": 0.076,
+            "mean_recall": 0.106,
+            "mean_f1": 0.088,
+            "std_precision": 0.032,
+            "std_recall": 0.039,
+            "total_tp": 90,
+            "total_fp": 1090,
+            "total_fn": 754,
+            "mean_flagged_minutes": 59.0,
+            "mean_alert_clusters": 17.1
+          },
+          "humidity_anomaly": {
+            "n_trials": 20,
+            "mean_precision": 0.018,
+            "mean_recall": 0.028,
+            "mean_f1": 0.022,
+            "std_precision": 0.029,
+            "std_recall": 0.049,
+            "total_tp": 21,
+            "total_fp": 1159,
+            "total_fn": 845,
+            "mean_flagged_minutes": 59.0,
+            "mean_alert_clusters": 11.5
+          }
+        },
+        "Vegetable Drawer": {
+          "temp_bump": {
+            "n_trials": 20,
+            "mean_precision": 0.083,
+            "mean_recall": 0.119,
+            "mean_f1": 0.097,
+            "std_precision": 0.064,
+            "std_recall": 0.092,
+            "total_tp": 98,
+            "total_fp": 1082,
+            "total_fn": 737,
+            "mean_flagged_minutes": 59.0,
+            "mean_alert_clusters": 12.8
+          },
+          "humidity_anomaly": {
+            "n_trials": 20,
+            "mean_precision": 0.064,
+            "mean_recall": 0.088,
+            "mean_f1": 0.073,
+            "std_precision": 0.064,
+            "std_recall": 0.09,
+            "total_tp": 75,
+            "total_fp": 1105,
+            "total_fn": 831,
+            "mean_flagged_minutes": 59.0,
+            "mean_alert_clusters": 11.3
+          }
+        },
+        "Door Shelf": {
+          "temp_bump": {
+            "n_trials": 20,
+            "mean_precision": 0.107,
+            "mean_recall": 0.154,
+            "mean_f1": 0.125,
+            "std_precision": 0.039,
+            "std_recall": 0.069,
+            "total_tp": 126,
+            "total_fp": 1054,
+            "total_fn": 729,
+            "mean_flagged_minutes": 59.0,
+            "mean_alert_clusters": 21.4
+          },
+          "humidity_anomaly": {
+            "n_trials": 20,
+            "mean_precision": 0.062,
+            "mean_recall": 0.09,
+            "mean_f1": 0.073,
+            "std_precision": 0.058,
+            "std_recall": 0.086,
+            "total_tp": 73,
+            "total_fp": 1107,
+            "total_fn": 758,
+            "mean_flagged_minutes": 59.0,
+            "mean_alert_clusters": 12.7
+          }
+        }
+      }
+    }
+  }
+}

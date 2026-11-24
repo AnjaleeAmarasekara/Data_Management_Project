@@ -12,10 +12,17 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "ingestion"))
 
-from analytics.anomaly import detect_excursions, detect_isolation_forest  # noqa: E402
+from analytics.anomaly import (  # noqa: E402
+    detect_cold_excursions,
+    detect_excursions,
+    detect_isolation_forest,
+    detect_silences,
+)
 from analytics.business_impact import estimate_impact  # noqa: E402
-from analytics.config import UNITS  # noqa: E402
+from analytics.config import PRODUCT_PROBE_FOR, UNITS  # noqa: E402
 from analytics.prepare import load_clean_minutely, sensor_day_zero  # noqa: E402
+from dq_engine.config import SILENCE_THRESHOLD_MIN  # noqa: E402
+from dq_engine.run_scoring import fetch_readings, observation_bounds  # noqa: E402
 from db import DATABASE_URL  # noqa: E402
 
 
@@ -49,9 +56,11 @@ def store_impact(conn: psycopg.Connection, device_id: str, rows: list[dict]) -> 
             """
             INSERT INTO impact_estimate
                 (device_id, relative_day, categories, sales_exposed, excursion_minutes, degree_minutes,
-                 peak_temp_c, spoilage_probability, revenue_at_risk, avg_trust)
+                 peak_temp_c, spoilage_probability, revenue_at_risk, avg_trust, temp_basis,
+                 cold_minutes, cold_degree_minutes, low_temp_c)
             VALUES (%(device_id)s, %(relative_day)s, %(categories)s, %(sales_exposed)s, %(excursion_minutes)s,
-                    %(degree_minutes)s, %(peak_temp_c)s, %(spoilage_probability)s, %(revenue_at_risk)s, %(avg_trust)s)
+                    %(degree_minutes)s, %(peak_temp_c)s, %(spoilage_probability)s, %(revenue_at_risk)s, %(avg_trust)s,
+                    %(temp_basis)s, %(cold_minutes)s, %(cold_degree_minutes)s, %(low_temp_c)s)
             """,
             [{**r, "device_id": device_id} for r in rows],
         )
@@ -67,18 +76,31 @@ def main() -> None:
         day_zero = sensor_day_zero(conn)
         sales_by_day = load_sales_by_day(conn)
 
+        # A probe inside the goods is loaded once per unit that has one, so the impact model
+        # can work from product temperature instead of the air around it.
+        probes = {
+            unit: load_clean_minutely(conn, probe_id, UNITS[unit], day_zero)
+            for unit, probe_id in PRODUCT_PROBE_FOR.items()
+            if unit in UNITS
+        }
+
+        bounds = observation_bounds(conn)
+
         for device_id, cfg in UNITS.items():
             df = load_clean_minutely(conn, device_id, cfg, day_zero)
             excursions = detect_excursions(df, cfg.max_safe_c)
-            watch = detect_isolation_forest(df, cfg.max_safe_c)
-            impact = estimate_impact(df, cfg, sales_by_day)
+            cold = detect_cold_excursions(df, cfg.min_safe_c)
+            watch = detect_isolation_forest(df, cfg.max_safe_c, cfg.min_safe_c)
+            silent = detect_silences(fetch_readings(conn, device_id), bounds[device_id][1], SILENCE_THRESHOLD_MIN)
+            impact = estimate_impact(df, cfg, sales_by_day, product_df=probes.get(device_id))
 
-            store_events(conn, device_id, excursions + watch)
+            store_events(conn, device_id, excursions + cold + watch + silent)
             store_impact(conn, device_id, impact)
             total_risk = sum(r["revenue_at_risk"] for r in impact)
+            basis = impact[0]["temp_basis"] if impact else "-"
             print(
-                f"{cfg.name}: {len(df):,} clean minutes | {len(excursions)} excursions, "
-                f"{len(watch)} watch events | revenue at risk {total_risk:,.2f}"
+                f"{cfg.name}: {len(df):,} clean samples | {len(excursions)} warm, {len(cold)} cold, "
+                f"{len(watch)} watch, {len(silent)} silent | risk LKR {total_risk:,.2f} (from {basis} temperature)"
             )
         conn.commit()
 

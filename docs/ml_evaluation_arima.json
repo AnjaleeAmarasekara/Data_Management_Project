@@ -1,0 +1,151 @@
+{
+  "generated_at": "2026-11-04T05:07:51.597930+00:00",
+  "method": "Walk-forward backtest: at every origin (every 60 min across real history), forecast 30 min ahead using only the preceding 180 min, then compare to the real values that actually followed. No synthetic data -- genuinely real held-out actuals.",
+  "results": {
+    "Freezer Compartment": {
+      "n_origins_used": 116,
+      "early_warning": {
+        "tp": 1,
+        "fp": 0,
+        "tn": 114,
+        "fn": 0,
+        "positives": 1,
+        "precision": 1.0,
+        "recall": 1.0,
+        "note": "persistence cannot early-warn by construction: from a within-limit state it always predicts no crossing, so its recall here is 0"
+      },
+      "mae_c": 1.047,
+      "rmse_c": 1.778,
+      "persistence_baseline": {
+        "mae_c": 0.981,
+        "rmse_c": 1.265,
+        "mae_skill": -0.068
+      },
+      "at_risk_classification": {
+        "tp": 1,
+        "fp": 1,
+        "tn": 114,
+        "fn": 0,
+        "precision": 0.5,
+        "recall": 1.0,
+        "accuracy": 0.991
+      }
+    },
+    "Top Shelf Chiller": {
+      "n_origins_used": 114,
+      "early_warning": {
+        "tp": 2,
+        "fp": 0,
+        "tn": 7,
+        "fn": 6,
+        "positives": 8,
+        "precision": 1.0,
+        "recall": 0.25,
+        "note": "persistence cannot early-warn by construction: from a within-limit state it always predicts no crossing, so its recall here is 0"
+      },
+      "mae_c": 1.238,
+      "rmse_c": 2.048,
+      "persistence_baseline": {
+        "mae_c": 1.25,
+        "rmse_c": 1.702,
+        "mae_skill": 0.01
+      },
+      "at_risk_classification": {
+        "tp": 101,
+        "fp": 0,
+        "tn": 7,
+        "fn": 6,
+        "precision": 1.0,
+        "recall": 0.944,
+        "accuracy": 0.947
+      }
+    },
+    "Middle Shelf Chiller": {
+      "n_origins_used": 118,
+      "early_warning": {
+        "tp": 0,
+        "fp": 1,
+        "tn": 97,
+        "fn": 3,
+        "positives": 3,
+        "precision": 0.0,
+        "recall": 0.0,
+        "note": "persistence cannot early-warn by construction: from a within-limit state it always predicts no crossing, so its recall here is 0"
+      },
+      "mae_c": 0.228,
+      "rmse_c": 0.301,
+      "persistence_baseline": {
+        "mae_c": 0.253,
+        "rmse_c": 0.371,
+        "mae_skill": 0.099
+      },
+      "at_risk_classification": {
+        "tp": 17,
+        "fp": 1,
+        "tn": 97,
+        "fn": 3,
+        "precision": 0.944,
+        "recall": 0.85,
+        "accuracy": 0.966
+      }
+    },
+    "Vegetable Drawer": {
+      "n_origins_used": 119,
+      "early_warning": {
+        "tp": 0,
+        "fp": 0,
+        "tn": 17,
+        "fn": 2,
+        "positives": 2,
+        "precision": null,
+        "recall": 0.0,
+        "note": "persistence cannot early-warn by construction: from a within-limit state it always predicts no crossing, so its recall here is 0"
+      },
+      "mae_c": 0.138,
+      "rmse_c": 0.281,
+      "persistence_baseline": {
+        "mae_c": 0.133,
+        "rmse_c": 0.269,
+        "mae_skill": -0.042
+      },
+      "at_risk_classification": {
+        "tp": 99,
+        "fp": 1,
+        "tn": 17,
+        "fn": 2,
+        "precision": 0.99,
+        "recall": 0.98,
+        "accuracy": 0.975
+      }
+    },
+    "Door Shelf": {
+      "n_origins_used": 119,
+      "early_warning": {
+        "tp": 1,
+        "fp": 0,
+        "tn": 96,
+        "fn": 0,
+        "positives": 1,
+        "precision": 1.0,
+        "recall": 1.0,
+        "note": "persistence cannot early-warn by construction: from a within-limit state it always predicts no crossing, so its recall here is 0"
+      },
+      "mae_c": 0.448,
+      "rmse_c": 0.722,
+      "persistence_baseline": {
+        "mae_c": 0.494,
+        "rmse_c": 0.791,
+        "mae_skill": 0.093
+      },
+      "at_risk_classification": {
+        "tp": 23,
+        "fp": 0,
+        "tn": 96,
+        "fn": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "accuracy": 1.0
+      }
+    }
+  }
+}
