@@ -12,3 +12,5 @@ frontend/dist/
 .angular/
 *.log
 .DS_Store
+hardware/esp32_probe/config.h
+~$*

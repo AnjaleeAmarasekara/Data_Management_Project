@@ -15,16 +15,26 @@ this script demonstrates.
 
 import argparse
 import os
+import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 import psycopg
 import requests
 
-from db import DATABASE_URL
+# Runnable as a plain script from anywhere: put the project root on the path so the shared
+# analytics config resolves, the same way the scoring and analytics scripts do.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from analytics.config import STEP_MINUTES  # noqa: E402
+from backend.app.settings import require_secret  # noqa: E402
+from db import DATABASE_URL  # noqa: E402
 
 API_BASE = os.environ.get("API_BASE", "http://localhost:8000/api")
-DEVICE_API_KEY = os.environ.get("DEVICE_API_KEY", "dev-only-device-key-change-me")
+# Same rule as the API: no placeholder fallback. A wrong key would only earn a 401, but it
+# would also be logged as an intrusion attempt, which is noise in the security log.
+DEVICE_API_KEY = require_secret("DEVICE_API_KEY")
 
 
 def push_reading(device_id: str, ts: datetime, temp: float, humidity: float) -> None:
@@ -47,7 +57,7 @@ def replay(device_id: str, hours: float, speed: float) -> None:
                 ORDER BY ts DESC
                 LIMIT %s
                 """,
-                (device_id, int(hours * 3600 / 5)),  # native sampling is ~5s
+                (device_id, max(1, int(hours * 60 / STEP_MINUTES))),  # loggers report every STEP_MINUTES
             )
             rows = cur.fetchall()[::-1]
 
@@ -70,7 +80,7 @@ def replay(device_id: str, hours: float, speed: float) -> None:
         print(f"  pushed {shifted_ts.isoformat()}  temp={temp:.1f}  humidity={humidity:.1f}", flush=True)
 
 
-HISTORY_END = "2021-01-01"  # the loaded dataset ends in 2020; anything later is replayed data
+HISTORY_END = "2018-01-01"  # the loaded refrigerator record ends in 2017; anything later is replayed data
 
 
 def cleanup() -> None:
@@ -81,9 +91,9 @@ def cleanup() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Replay historical sensor readings as a live feed, via the real ingestion API")
-    parser.add_argument("device_id", nargs="?", help="device_id from sensor_unit, e.g. b8:27:eb:bf:9d:51")
-    parser.add_argument("--hours", type=float, default=0.25, help="hours of history to replay")
-    parser.add_argument("--speed", type=float, default=1.0, help="playback speed multiplier")
+    parser.add_argument("device_id", nargs="?", help="device_id from sensor_unit, e.g. BKK-012-MS")
+    parser.add_argument("--hours", type=float, default=4.0, help="hours of history to replay")
+    parser.add_argument("--speed", type=float, default=60.0, help="playback speed multiplier (5-min samples, so >1 is needed for a live demo)")
     parser.add_argument("--cleanup", action="store_true", help="delete previously replayed readings and exit")
     args = parser.parse_args()
     if args.cleanup:
