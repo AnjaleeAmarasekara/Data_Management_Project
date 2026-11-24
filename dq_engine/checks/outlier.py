@@ -25,7 +25,11 @@ PLAUSIBLE_RANGES = {
 # Floor on the residual spread. Sensors report in coarse steps (0.1C), so the true IQR of
 # the detrended series is often exactly 0 -- without a floor, every non-zero residual
 # would be flagged (measured: ~10% of real readings falsely flagged before this floor).
-MIN_IQR = {"temp": 0.3, "humidity": 1.5}
+# Humidity moves far more than temperature, so it needs a much larger floor. Measured
+# across the refrigerator fleet: at the temperature-style floor of 1.5 points, 18.3% of
+# clean humidity windows were flagged. At 10.0 it is 2.1%, in line with the roughly 2%
+# false-positive budget every other threshold here is held to.
+MIN_IQR = {"temp": 0.3, "humidity": 10.0}
 
 
 def check_outliers(window: pd.DataFrame, column: str = "temp", iqr_multiplier: float = 3.0) -> CheckResult:

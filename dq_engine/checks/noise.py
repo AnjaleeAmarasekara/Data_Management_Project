@@ -13,8 +13,11 @@ from .result import CheckResult
 
 
 def check_noise(
-    window: pd.DataFrame, column: str = "temp", rate_threshold: float = 2.0, min_ratio: float = 0.02
+    window: pd.DataFrame, column: str = "temp", rate_threshold: float = 3.0, min_ratio: float = 0.15
 ) -> CheckResult:
+    """min_ratio is deliberately high: noise means sustained jitter across the window, not
+    one large step. A single defrost cycle or door opening produces one big jump, which is
+    normal refrigeration behaviour and is the outlier check's concern, not this one."""
     series = window[column].dropna()
     if len(series) < 3:
         return CheckResult(flag=False, penalty=0.0, evidence={"reason": "insufficient_data"})

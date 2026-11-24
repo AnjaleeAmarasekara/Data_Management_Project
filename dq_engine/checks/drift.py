@@ -16,9 +16,12 @@ from .result import CheckResult
 def check_drift(
     window: pd.DataFrame,
     column: str = "temp",
-    slope_threshold: float = 0.05,
-    shift_threshold: float = 1.5,
+    slope_threshold: float = 0.3,
+    shift_threshold: float = 3.5,
 ) -> CheckResult:
+    """Defaults are the chilled-zone thresholds; scoring passes per-equipment values,
+    because a freezer's defrost cycle legitimately shifts far more than a chiller's
+    (see dq_engine/config.py)."""
     series = window[column].dropna()
     if len(series) < 10:
         return CheckResult(flag=False, penalty=0.0, evidence={"reason": "insufficient_data"})

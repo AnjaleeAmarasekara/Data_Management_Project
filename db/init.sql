@@ -4,15 +4,25 @@
 
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
--- Registry mapping each physical sensor (device MAC id from the dataset) to a modeled
--- cold-storage unit. The source dataset has no branch/store field, so we model a single
--- branch with three refrigeration units, one per device. See docs/data_linkage.md.
+-- Registry mapping each physical sensor channel to a modeled cold-storage unit.
+-- Each instrumented refrigerator is modeled as one SME premises (site_id), and each of
+-- its monitored zones (freezer compartment, top/middle shelf, vegetable drawer, door
+-- shelf) as one cold-storage unit within that site. See docs/data_linkage.md.
 CREATE TABLE sensor_unit (
     device_id    TEXT PRIMARY KEY,
     unit_name    TEXT NOT NULL,
     unit_type    TEXT NOT NULL,
-    branch_name  TEXT NOT NULL DEFAULT 'Main Branch'
+    branch_name  TEXT NOT NULL DEFAULT 'Main Branch',
+    site_id      TEXT,
+    site_name    TEXT,
+    zone         TEXT
 );
+
+CREATE INDEX ON sensor_unit (site_id);
+
+-- Registry columns (monitored units, safe limits, clock, warm-up) are added by
+-- db/migrations/001_unit_registry.sql, so a fresh install and an upgraded one end up with
+-- the same table. Mounted after this file in docker-compose.yml.
 
 -- Raw IoT telemetry, ingested as-is (no cleaning at this stage -- that is the Data
 -- Quality layer's job, not ingestion's). temp/humidity drive the cold-chain logic;
@@ -55,8 +65,10 @@ CREATE TABLE quality_score (
 
 CREATE INDEX ON quality_score (device_id, window_start DESC);
 
--- Retail business data (independent source, joined to sensor data only via the
--- modeled relative_day index -- see docs/data_linkage.md for why).
+-- Retail business data (independent source). One row is a store-family-day total, which
+-- is the grain the source publishes. Joined to sensor data by calendar date, after the
+-- refrigerator record is anchored onto this retail window -- see docs/data_linkage.md.
+-- quantity is NUMERIC because perishables are sold by weight as well as by item.
 CREATE TABLE sales_transaction (
     invoice_id       TEXT PRIMARY KEY,
     sale_date        DATE NOT NULL,
@@ -65,8 +77,8 @@ CREATE TABLE sales_transaction (
     gender           TEXT,
     product_category TEXT NOT NULL,
     unit_price       NUMERIC(10,2) NOT NULL,
-    quantity         INTEGER NOT NULL,
-    total_sales      NUMERIC(10,2) NOT NULL,
+    quantity         NUMERIC(12,3) NOT NULL,
+    total_sales      NUMERIC(14,2) NOT NULL,
     payment_method   TEXT
 );
 
@@ -108,6 +120,14 @@ CREATE TABLE impact_estimate (
     spoilage_probability DOUBLE PRECISION NOT NULL,
     revenue_at_risk      NUMERIC(10,2) NOT NULL,
     avg_trust            NUMERIC(5,2) NOT NULL,
+    -- 'product' when a probe inside the goods supplied the temperature, 'air' when only
+    -- the surrounding air was available. Spoilage depends on product temperature, so the
+    -- dashboard says which basis produced each figure rather than implying they are equal.
+    temp_basis           TEXT NOT NULL DEFAULT 'air',
+    -- time and severity spent below the lower bound, counted in degree_minutes too
+    cold_minutes         INTEGER NOT NULL DEFAULT 0,
+    cold_degree_minutes  DOUBLE PRECISION NOT NULL DEFAULT 0,
+    low_temp_c           DOUBLE PRECISION,
     PRIMARY KEY (device_id, relative_day)
 );
 
@@ -144,3 +164,17 @@ CREATE TABLE security_event (
     occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX ON security_event (occurred_at DESC);
+
+-- Who did what: admin actions (account creation, role changes, enable/disable), alert
+-- acknowledgements, fault-injection demo runs, and login attempts. Distinct from
+-- security_event, which logs unauthenticated device access attempts and has no actor.
+CREATE TABLE audit_log (
+    id          BIGSERIAL PRIMARY KEY,
+    actor_id    BIGINT REFERENCES app_user(id),
+    actor_email TEXT,           -- kept separately so failed logins (no user row) are still attributable
+    action      TEXT NOT NULL,  -- e.g. 'login_failed', 'user_created', 'role_changed', 'demo_run'
+    target      TEXT,
+    detail      TEXT,
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX ON audit_log (occurred_at DESC);

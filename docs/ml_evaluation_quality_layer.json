@@ -1,0 +1,688 @@
+{
+  "generated_at": "2026-11-04T17:18:46.450876+00:00",
+  "method": "Classification metrics for the data quality layer.\n\nThe question an evaluator asks is \"how accurate is the quality layer?\". Real sensor data has\nno ground truth for \"this window was faulty\", so the faults are injected: a window known to be\nclean is corrupted with a fault whose type and location are known, then scored by the\nproduction code (dq_engine.scoring.score_window, the same fault functions as the dashboard's\nfault-injection demo). Every outcome can then be put in a confusion matrix.\n\nDesign, so the numbers can be defended:\n\n- Positives: clean real windows (no flag, trust High) from across the fleet, each corrupted\n  with each of the ten faults. A positive is \"detected\" when the window raises the flag the\n  fault is meant to raise. The subtle calibration offset has no expected flag, so it can only\n  be a miss: it is included on purpose.\n- Negatives: a random sample of real windows, NOT filtered for cleanliness. Any flag on one\n  counts as a false alarm. Some of those windows may genuinely be faulty (a stuck sensor), so\n  the false-alarm rate is an upper bound, not an optimistic one. Filtering the negatives with\n  the same checks would make the false-alarm rate zero by construction.\n- Each fault is scored against the same negatives, so every per-fault row is a one-vs-rest\n  test and the macro average is comparable across faults.",
+  "sample": {
+    "positive_windows_per_fault": 300,
+    "negative_windows": 600,
+    "zones": [
+      "FC",
+      "TS",
+      "MS",
+      "VD",
+      "DS"
+    ],
+    "cold_unit_windows_scored": 38130,
+    "cold_unit_windows_with_any_flag": 3484,
+    "cold_unit_flag_rate": 0.0914
+  },
+  "false_alarm_rate_on_real_windows": {
+    "flagged": 53,
+    "of": 600,
+    "rate": 0.088,
+    "ci95": [
+      0.068,
+      0.114
+    ]
+  },
+  "false_alarm_rate_label_level": {
+    "flagged": 10,
+    "of": 600,
+    "rate": 0.017,
+    "ci95": [
+      0.009,
+      0.03
+    ]
+  },
+  "per_fault": {
+    "dropout": {
+      "expected_flag": "missing_flag",
+      "windows": 300,
+      "tp": 300,
+      "fp": 53,
+      "fn": 0,
+      "tn": 547,
+      "precision": 0.85,
+      "recall": 1.0,
+      "f1": 0.919,
+      "accuracy": 0.941,
+      "false_positive_rate": 0.088,
+      "recall_ci95": [
+        0.987,
+        1.0
+      ],
+      "false_positive_rate_ci95": [
+        0.068,
+        0.114
+      ]
+    },
+    "spike": {
+      "expected_flag": "outlier_flag",
+      "windows": 300,
+      "tp": 281,
+      "fp": 53,
+      "fn": 19,
+      "tn": 547,
+      "precision": 0.841,
+      "recall": 0.937,
+      "f1": 0.886,
+      "accuracy": 0.92,
+      "false_positive_rate": 0.088,
+      "recall_ci95": [
+        0.903,
+        0.959
+      ],
+      "false_positive_rate_ci95": [
+        0.068,
+        0.114
+      ]
+    },
+    "drift": {
+      "expected_flag": "drift_flag",
+      "windows": 300,
+      "tp": 300,
+      "fp": 53,
+      "fn": 0,
+      "tn": 547,
+      "precision": 0.85,
+      "recall": 1.0,
+      "f1": 0.919,
+      "accuracy": 0.941,
+      "false_positive_rate": 0.088,
+      "recall_ci95": [
+        0.987,
+        1.0
+      ],
+      "false_positive_rate_ci95": [
+        0.068,
+        0.114
+      ]
+    },
+    "noise": {
+      "expected_flag": "noise_flag",
+      "windows": 300,
+      "tp": 300,
+      "fp": 53,
+      "fn": 0,
+      "tn": 547,
+      "precision": 0.85,
+      "recall": 1.0,
+      "f1": 0.919,
+      "accuracy": 0.941,
+      "false_positive_rate": 0.088,
+      "recall_ci95": [
+        0.987,
+        1.0
+      ],
+      "false_positive_rate_ci95": [
+        0.068,
+        0.114
+      ]
+    },
+    "duplicate_timestamp": {
+      "expected_flag": "noise_flag",
+      "windows": 300,
+      "tp": 300,
+      "fp": 53,
+      "fn": 0,
+      "tn": 547,
+      "precision": 0.85,
+      "recall": 1.0,
+      "f1": 0.919,
+      "accuracy": 0.941,
+      "false_positive_rate": 0.088,
+      "recall_ci95": [
+        0.987,
+        1.0
+      ],
+      "false_positive_rate_ci95": [
+        0.068,
+        0.114
+      ]
+    },
+    "calibration_bias_subtle": {
+      "expected_flag": null,
+      "windows": 300,
+      "tp": 0,
+      "fp": 53,
+      "fn": 300,
+      "tn": 547,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "accuracy": 0.608,
+      "false_positive_rate": 0.088,
+      "recall_ci95": [
+        0.0,
+        0.013
+      ],
+      "false_positive_rate_ci95": [
+        0.068,
+        0.114
+      ]
+    },
+    "calibration_bias_extreme": {
+      "expected_flag": "outlier_flag",
+      "windows": 300,
+      "tp": 300,
+      "fp": 53,
+      "fn": 0,
+      "tn": 547,
+      "precision": 0.85,
+      "recall": 1.0,
+      "f1": 0.919,
+      "accuracy": 0.941,
+      "false_positive_rate": 0.088,
+      "recall_ci95": [
+        0.987,
+        1.0
+      ],
+      "false_positive_rate_ci95": [
+        0.068,
+        0.114
+      ]
+    },
+    "replay_attack": {
+      "expected_flag": "integrity_flag",
+      "windows": 300,
+      "tp": 240,
+      "fp": 53,
+      "fn": 60,
+      "tn": 547,
+      "precision": 0.819,
+      "recall": 0.8,
+      "f1": 0.809,
+      "accuracy": 0.874,
+      "false_positive_rate": 0.088,
+      "recall_ci95": [
+        0.751,
+        0.841
+      ],
+      "false_positive_rate_ci95": [
+        0.068,
+        0.114
+      ]
+    },
+    "data_injection": {
+      "expected_flag": "integrity_flag",
+      "windows": 300,
+      "tp": 300,
+      "fp": 53,
+      "fn": 0,
+      "tn": 547,
+      "precision": 0.85,
+      "recall": 1.0,
+      "f1": 0.919,
+      "accuracy": 0.941,
+      "false_positive_rate": 0.088,
+      "recall_ci95": [
+        0.987,
+        1.0
+      ],
+      "false_positive_rate_ci95": [
+        0.068,
+        0.114
+      ]
+    },
+    "sensor_silent": {
+      "expected_flag": "missing_flag",
+      "windows": 300,
+      "tp": 300,
+      "fp": 53,
+      "fn": 0,
+      "tn": 547,
+      "precision": 0.85,
+      "recall": 1.0,
+      "f1": 0.919,
+      "accuracy": 0.941,
+      "false_positive_rate": 0.088,
+      "recall_ci95": [
+        0.987,
+        1.0
+      ],
+      "false_positive_rate_ci95": [
+        0.068,
+        0.114
+      ]
+    }
+  },
+  "per_fault_label_level": {
+    "dropout": {
+      "tp": 300,
+      "fp": 10,
+      "fn": 0,
+      "tn": 590,
+      "precision": 0.968,
+      "recall": 1.0,
+      "f1": 0.984,
+      "accuracy": 0.989,
+      "false_positive_rate": 0.017,
+      "recall_ci95": [
+        0.987,
+        1.0
+      ],
+      "false_positive_rate_ci95": [
+        0.009,
+        0.03
+      ]
+    },
+    "spike": {
+      "tp": 1,
+      "fp": 10,
+      "fn": 299,
+      "tn": 590,
+      "precision": 0.091,
+      "recall": 0.003,
+      "f1": 0.006,
+      "accuracy": 0.657,
+      "false_positive_rate": 0.017,
+      "recall_ci95": [
+        0.001,
+        0.019
+      ],
+      "false_positive_rate_ci95": [
+        0.009,
+        0.03
+      ]
+    },
+    "drift": {
+      "tp": 300,
+      "fp": 10,
+      "fn": 0,
+      "tn": 590,
+      "precision": 0.968,
+      "recall": 1.0,
+      "f1": 0.984,
+      "accuracy": 0.989,
+      "false_positive_rate": 0.017,
+      "recall_ci95": [
+        0.987,
+        1.0
+      ],
+      "false_positive_rate_ci95": [
+        0.009,
+        0.03
+      ]
+    },
+    "noise": {
+      "tp": 286,
+      "fp": 10,
+      "fn": 14,
+      "tn": 590,
+      "precision": 0.966,
+      "recall": 0.953,
+      "f1": 0.96,
+      "accuracy": 0.973,
+      "false_positive_rate": 0.017,
+      "recall_ci95": [
+        0.923,
+        0.972
+      ],
+      "false_positive_rate_ci95": [
+        0.009,
+        0.03
+      ]
+    },
+    "duplicate_timestamp": {
+      "tp": 0,
+      "fp": 10,
+      "fn": 300,
+      "tn": 590,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "accuracy": 0.656,
+      "false_positive_rate": 0.017,
+      "recall_ci95": [
+        0.0,
+        0.013
+      ],
+      "false_positive_rate_ci95": [
+        0.009,
+        0.03
+      ]
+    },
+    "calibration_bias_subtle": {
+      "tp": 0,
+      "fp": 10,
+      "fn": 300,
+      "tn": 590,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "accuracy": 0.656,
+      "false_positive_rate": 0.017,
+      "recall_ci95": [
+        0.0,
+        0.013
+      ],
+      "false_positive_rate_ci95": [
+        0.009,
+        0.03
+      ]
+    },
+    "calibration_bias_extreme": {
+      "tp": 300,
+      "fp": 10,
+      "fn": 0,
+      "tn": 590,
+      "precision": 0.968,
+      "recall": 1.0,
+      "f1": 0.984,
+      "accuracy": 0.989,
+      "false_positive_rate": 0.017,
+      "recall_ci95": [
+        0.987,
+        1.0
+      ],
+      "false_positive_rate_ci95": [
+        0.009,
+        0.03
+      ]
+    },
+    "replay_attack": {
+      "tp": 240,
+      "fp": 10,
+      "fn": 60,
+      "tn": 590,
+      "precision": 0.96,
+      "recall": 0.8,
+      "f1": 0.873,
+      "accuracy": 0.922,
+      "false_positive_rate": 0.017,
+      "recall_ci95": [
+        0.751,
+        0.841
+      ],
+      "false_positive_rate_ci95": [
+        0.009,
+        0.03
+      ]
+    },
+    "data_injection": {
+      "tp": 300,
+      "fp": 10,
+      "fn": 0,
+      "tn": 590,
+      "precision": 0.968,
+      "recall": 1.0,
+      "f1": 0.984,
+      "accuracy": 0.989,
+      "false_positive_rate": 0.017,
+      "recall_ci95": [
+        0.987,
+        1.0
+      ],
+      "false_positive_rate_ci95": [
+        0.009,
+        0.03
+      ]
+    },
+    "sensor_silent": {
+      "tp": 300,
+      "fp": 10,
+      "fn": 0,
+      "tn": 590,
+      "precision": 0.968,
+      "recall": 1.0,
+      "f1": 0.984,
+      "accuracy": 0.989,
+      "false_positive_rate": 0.017,
+      "recall_ci95": [
+        0.987,
+        1.0
+      ],
+      "false_positive_rate_ci95": [
+        0.009,
+        0.03
+      ]
+    }
+  },
+  "window_level_overall_label_level": {
+    "tp": 2027,
+    "fp": 50,
+    "fn": 973,
+    "tn": 2950,
+    "precision": 0.976,
+    "recall": 0.676,
+    "f1": 0.799,
+    "accuracy": 0.83,
+    "false_positive_rate": 0.017,
+    "recall_ci95": [
+      0.659,
+      0.692
+    ],
+    "false_positive_rate_ci95": [
+      0.013,
+      0.022
+    ],
+    "note": "negatives re-weighted to match the number of positives, so accuracy is on a 50:50 mix"
+  },
+  "per_check": {
+    "missing_flag": {
+      "catches": [
+        "dropout",
+        "sensor_silent"
+      ],
+      "windows": 600,
+      "tp": 600,
+      "fp": 0,
+      "fn": 0,
+      "tn": 600,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "accuracy": 1.0,
+      "false_positive_rate": 0.0,
+      "recall_ci95": [
+        0.994,
+        1.0
+      ],
+      "false_positive_rate_ci95": [
+        0.0,
+        0.006
+      ]
+    },
+    "outlier_flag": {
+      "catches": [
+        "spike",
+        "calibration_bias_extreme"
+      ],
+      "windows": 600,
+      "tp": 581,
+      "fp": 41,
+      "fn": 19,
+      "tn": 559,
+      "precision": 0.934,
+      "recall": 0.968,
+      "f1": 0.951,
+      "accuracy": 0.95,
+      "false_positive_rate": 0.068,
+      "recall_ci95": [
+        0.951,
+        0.98
+      ],
+      "false_positive_rate_ci95": [
+        0.051,
+        0.091
+      ]
+    },
+    "drift_flag": {
+      "catches": [
+        "drift"
+      ],
+      "windows": 300,
+      "tp": 300,
+      "fp": 2,
+      "fn": 0,
+      "tn": 598,
+      "precision": 0.993,
+      "recall": 1.0,
+      "f1": 0.997,
+      "accuracy": 0.998,
+      "false_positive_rate": 0.003,
+      "recall_ci95": [
+        0.987,
+        1.0
+      ],
+      "false_positive_rate_ci95": [
+        0.001,
+        0.012
+      ]
+    },
+    "noise_flag": {
+      "catches": [
+        "noise",
+        "duplicate_timestamp"
+      ],
+      "windows": 600,
+      "tp": 600,
+      "fp": 3,
+      "fn": 0,
+      "tn": 597,
+      "precision": 0.995,
+      "recall": 1.0,
+      "f1": 0.998,
+      "accuracy": 0.998,
+      "false_positive_rate": 0.005,
+      "recall_ci95": [
+        0.994,
+        1.0
+      ],
+      "false_positive_rate_ci95": [
+        0.002,
+        0.015
+      ]
+    },
+    "integrity_flag": {
+      "catches": [
+        "replay_attack",
+        "data_injection"
+      ],
+      "windows": 600,
+      "tp": 540,
+      "fp": 7,
+      "fn": 60,
+      "tn": 593,
+      "precision": 0.987,
+      "recall": 0.9,
+      "f1": 0.942,
+      "accuracy": 0.944,
+      "false_positive_rate": 0.012,
+      "recall_ci95": [
+        0.873,
+        0.922
+      ],
+      "false_positive_rate_ci95": [
+        0.006,
+        0.024
+      ]
+    }
+  },
+  "fault_vs_flag_rate": {
+    "dropout": {
+      "missing_flag": 1.0,
+      "outlier_flag": 0.01,
+      "drift_flag": 0.017,
+      "noise_flag": 0.007,
+      "integrity_flag": 0.0,
+      "any_flag": 1.0
+    },
+    "spike": {
+      "missing_flag": 0.0,
+      "outlier_flag": 0.937,
+      "drift_flag": 0.003,
+      "noise_flag": 0.0,
+      "integrity_flag": 0.0,
+      "any_flag": 0.937
+    },
+    "drift": {
+      "missing_flag": 0.0,
+      "outlier_flag": 0.357,
+      "drift_flag": 1.0,
+      "noise_flag": 0.0,
+      "integrity_flag": 0.0,
+      "any_flag": 1.0
+    },
+    "noise": {
+      "missing_flag": 0.0,
+      "outlier_flag": 0.927,
+      "drift_flag": 0.047,
+      "noise_flag": 1.0,
+      "integrity_flag": 0.2,
+      "any_flag": 1.0
+    },
+    "duplicate_timestamp": {
+      "missing_flag": 0.0,
+      "outlier_flag": 0.0,
+      "drift_flag": 0.0,
+      "noise_flag": 1.0,
+      "integrity_flag": 0.0,
+      "any_flag": 1.0
+    },
+    "calibration_bias_subtle": {
+      "missing_flag": 0.0,
+      "outlier_flag": 0.003,
+      "drift_flag": 0.0,
+      "noise_flag": 0.0,
+      "integrity_flag": 0.0,
+      "any_flag": 0.003
+    },
+    "calibration_bias_extreme": {
+      "missing_flag": 0.0,
+      "outlier_flag": 1.0,
+      "drift_flag": 0.0,
+      "noise_flag": 0.0,
+      "integrity_flag": 0.0,
+      "any_flag": 1.0
+    },
+    "replay_attack": {
+      "missing_flag": 0.0,
+      "outlier_flag": 0.23,
+      "drift_flag": 0.0,
+      "noise_flag": 0.0,
+      "integrity_flag": 0.8,
+      "any_flag": 0.823
+    },
+    "data_injection": {
+      "missing_flag": 0.0,
+      "outlier_flag": 1.0,
+      "drift_flag": 0.033,
+      "noise_flag": 0.0,
+      "integrity_flag": 1.0,
+      "any_flag": 1.0
+    },
+    "sensor_silent": {
+      "missing_flag": 1.0,
+      "outlier_flag": 0.017,
+      "drift_flag": 0.027,
+      "noise_flag": 0.013,
+      "integrity_flag": 0.0,
+      "any_flag": 1.0
+    }
+  },
+  "window_level_overall": {
+    "tp": 2629,
+    "fp": 265,
+    "fn": 371,
+    "tn": 2735,
+    "precision": 0.908,
+    "recall": 0.876,
+    "f1": 0.892,
+    "accuracy": 0.894,
+    "false_positive_rate": 0.088,
+    "recall_ci95": [
+      0.864,
+      0.888
+    ],
+    "false_positive_rate_ci95": [
+      0.079,
+      0.099
+    ],
+    "note": "negatives re-weighted to match the number of positives, so accuracy is on a 50:50 mix"
+  },
+  "macro_average_detectable_faults": {
+    "precision": 0.846,
+    "recall": 0.971,
+    "f1": 0.903
+  }
+}
