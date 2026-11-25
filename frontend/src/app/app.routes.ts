@@ -5,11 +5,11 @@ import { authGuard, roleGuard } from './shared/auth.guard';
 export const routes: Routes = [
   { path: 'login', title: 'Sign in', loadComponent: () => import('./pages/login').then((m) => m.LoginPage) },
   { path: '', pathMatch: 'full', redirectTo: 'monitoring' },
-  { path: 'monitoring', title: 'Real-Time Monitoring', canActivate: [authGuard], loadComponent: () => import('./pages/monitoring').then((m) => m.MonitoringPage) },
+  { path: 'monitoring', title: 'Monitoring', canActivate: [authGuard], loadComponent: () => import('./pages/monitoring').then((m) => m.MonitoringPage) },
   { path: 'quality', title: 'Data Quality', canActivate: [authGuard], loadComponent: () => import('./pages/quality').then((m) => m.QualityPage) },
   { path: 'alerts', title: 'Alerts', canActivate: [authGuard], loadComponent: () => import('./pages/alerts').then((m) => m.AlertsPage) },
-  { path: 'impact', title: 'Risk & Business Impact', canActivate: [authGuard], loadComponent: () => import('./pages/impact').then((m) => m.ImpactPage) },
-  { path: 'trends', title: 'Historical Trends', canActivate: [authGuard], loadComponent: () => import('./pages/trends').then((m) => m.TrendsPage) },
+  { path: 'impact', title: 'Business Impact', canActivate: [authGuard], loadComponent: () => import('./pages/impact').then((m) => m.ImpactPage) },
+  { path: 'trends', title: 'Trends', canActivate: [authGuard], loadComponent: () => import('./pages/trends').then((m) => m.TrendsPage) },
   {
     path: 'reports',
     title: 'Reports',
@@ -18,7 +18,7 @@ export const routes: Routes = [
   },
   {
     path: 'admin/users',
-    title: 'User Management',
+    title: 'Users',
     canActivate: [authGuard, roleGuard('admin')],
     loadComponent: () => import('./pages/users').then((m) => m.UsersPage),
   },

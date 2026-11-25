@@ -27,7 +27,7 @@ import { AuthService, ROLE_LABELS } from './shared/auth.service';
             <div class="nav-group">Operations</div>
             <a routerLink="/monitoring" routerLinkActive="active">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2.5-6 4 12 2.5-6H21" /></svg>
-              Real-Time Monitoring
+              Monitoring
             </a>
             <a routerLink="/alerts" routerLinkActive="active">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16v-5a6 6 0 1 1 12 0v5l1.5 2h-15z" /><path d="M10 20.5a2 2 0 0 0 4 0" /></svg>
@@ -41,11 +41,11 @@ import { AuthService, ROLE_LABELS } from './shared/auth.service';
             </a>
             <a routerLink="/trends" routerLinkActive="active">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 3.5v17h17" /><path d="M7.5 15l3.5-4.5 3 3L19 7" /></svg>
-              Historical Trends
+              Trends
             </a>
             <a routerLink="/impact" routerLinkActive="active">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V12M12 20V5M19 20v-5" /></svg>
-              Risk &amp; Business Impact
+              Business Impact
             </a>
 
             @if (auth.hasRole('quality_supervisor')) {
@@ -58,7 +58,7 @@ import { AuthService, ROLE_LABELS } from './shared/auth.service';
             @if (auth.hasRole('admin')) {
               <a routerLink="/admin/users" routerLinkActive="active">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8.5" r="3" /><path d="M3.5 19.5c0-3 2.5-5.3 5.5-5.3s5.5 2.3 5.5 5.3" /><path d="M16 5.8a3 3 0 0 1 0 5.4M18.2 14.6c1.7.7 2.8 2.4 2.8 4.9" /></svg>
-                User Management
+                Users
               </a>
               <a routerLink="/admin/devices" routerLinkActive="active">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="3.5" width="10" height="17" rx="2" /><path d="M12 7.5v6" /><circle cx="12" cy="16" r="1.6" /></svg>

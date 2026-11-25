@@ -57,8 +57,8 @@ const DEMO_ACCOUNTS = [
           <button type="submit" class="primary go" [disabled]="loading()">{{ loading() ? 'Signing in…' : 'Sign in' }}</button>
         </form>
 
-        <div class="demo">
-          <div class="demo-head">Review accounts <span class="subtle">· password <code>{{ demoPassword }}</code></span></div>
+        <details class="demo">
+          <summary class="demo-head">Demo accounts <span class="subtle">· password <code>{{ demoPassword }}</code></span></summary>
           <div class="demo-list">
             @for (a of demoAccounts; track a.email) {
               <button type="button" class="demo-row" (click)="fill(a.email)">
@@ -67,7 +67,7 @@ const DEMO_ACCOUNTS = [
               </button>
             }
           </div>
-        </div>
+        </details>
       </section>
     </div>
   `,
@@ -92,7 +92,8 @@ const DEMO_ACCOUNTS = [
     .go { min-height: 40px; margin-top: 4px; }
 
     .demo { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); padding: 14px 14px 8px; }
-    .demo-head { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+    .demo-head { font-size: 13px; font-weight: 600; cursor: pointer; padding-bottom: 6px; }
+    .demo:not([open]) { padding-bottom: 8px; }
     .demo-list { display: flex; flex-direction: column; }
     .demo-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 6px; padding: 7px 8px; min-height: 0; }
     .demo-row:hover:not(:disabled) { background: var(--surface); }

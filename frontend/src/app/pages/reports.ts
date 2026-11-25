@@ -17,102 +17,68 @@ const DEFAULT_END = '2017-08-07T00:00';
     <div class="page-head">
       <div>
         <h1>Reports</h1>
-        <p class="subtle">
-          A combined data-quality, alerts and business-impact summary for a date range, previewed here and available as
-          a PDF. Restricted to Quality Supervisor and above.
-        </p>
+        <p class="subtle">A summary of data quality, alerts and costs for any period, ready to download as a PDF.</p>
       </div>
     </div>
 
-    <section class="card">
-      <div class="row" style="margin-bottom: 4px">
-        <label class="row">From (UTC) <input type="datetime-local" [(ngModel)]="start" /></label>
-        <label class="row">To (UTC) <input type="datetime-local" [(ngModel)]="end" /></label>
+    <section class="card controls">
+      <label>From <input type="datetime-local" [(ngModel)]="start" /></label>
+      <label>To <input type="datetime-local" [(ngModel)]="end" /></label>
+      <div class="units">
+        <span class="lbl">Units</span>
+        <div class="row" style="gap: 6px">
+          @for (u of units(); track u.device_id) {
+            <button class="toggle" [class.on]="selected().has(u.device_id)" (click)="toggle(u.device_id)">{{ u.unit_name }}</button>
+          }
+        </div>
       </div>
-      <div class="row" style="margin: 10px 0">
-        <span class="subtle">Units</span>
-        @for (u of units(); track u.device_id) {
-          <label class="row" style="gap: 4px">
-            <input type="checkbox" [checked]="selected().has(u.device_id)" (change)="toggle(u.device_id)" />
-            {{ u.unit_name }}
-          </label>
-        }
+      <div class="row actions">
+        <button (click)="preview()" [disabled]="loading() || !selected().size">{{ loading() ? 'Updating…' : 'Update preview' }}</button>
+        <button class="primary" (click)="downloadPdf()" [disabled]="downloading() || !selected().size">{{ downloading() ? 'Preparing…' : 'Download PDF' }}</button>
       </div>
-      <div class="row">
-        <button class="primary" (click)="preview()" [disabled]="loading() || !selected().size">{{ loading() ? 'Loading...' : 'Preview report' }}</button>
-        <button (click)="downloadPdf()" [disabled]="downloading() || !selected().size">{{ downloading() ? 'Preparing PDF...' : 'Download PDF' }}</button>
-      </div>
-      @if (error(); as e) { <div class="notice error" style="margin-top: 10px" role="alert">{{ e }}</div> }
     </section>
+    @if (error(); as e) { <div class="notice error" style="margin-top: 12px" role="alert">{{ e }}</div> }
 
     @if (report(); as r) {
-      <section class="card" style="margin-top: 14px">
-        <h2>Data quality summary</h2>
+      <div class="stats" style="margin-top: 16px">
+        <div class="stat"><span class="stat-label">Average data trust</span><span class="stat-value ok">{{ avgTrust(r) | number: '1.1-1' }}</span></div>
+        <div class="stat"><span class="stat-label">Alerts</span><span class="stat-value">{{ r.alerts.length }}</span><span class="stat-sub">{{ countSev(r, 'critical') }} critical</span></div>
+        <div class="stat"><span class="stat-label">Time out of range</span><span class="stat-value">{{ hours(totalMinutes(r)) }}</span></div>
+        <div class="stat"><span class="stat-label">Revenue at risk</span><span class="stat-value crit">LKR {{ r.total_revenue_at_risk | number: '1.0-0' }}</span></div>
+      </div>
+
+      <section class="card">
+        <h2>By unit</h2>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Unit</th><th class="num">Windows</th><th class="num">Avg trust</th><th class="num">High</th><th class="num">Medium</th><th class="num">Low</th></tr></thead>
+            <thead><tr><th>Unit</th><th class="num">Data trust</th><th class="num">Critical</th><th class="num">Warning</th><th class="num">Early warnings</th><th class="num">Time out of range</th><th class="num">Revenue at risk (LKR)</th></tr></thead>
             <tbody>
-              @for (u of r.units; track u.device_id) {
+              @for (u of rows(); track u.device_id) {
                 <tr>
-                  <td>{{ u.unit_name }}</td>
-                  <td class="num">{{ u.windows }}</td>
-                  <td class="num">{{ u.avg_trust === null ? '-' : (u.avg_trust | number: '1.1-1') }}</td>
-                  <td class="num">{{ u.high }}</td><td class="num">{{ u.medium }}</td><td class="num">{{ u.low }}</td>
+                  <td><strong>{{ u.unit_name }}</strong></td>
+                  <td class="num">{{ u.trust === null ? '—' : (u.trust | number: '1.1-1') }}</td>
+                  <td class="num">{{ u.critical || '—' }}</td>
+                  <td class="num">{{ u.warning || '—' }}</td>
+                  <td class="num">{{ u.watch || '—' }}</td>
+                  <td class="num">{{ u.minutes ? hours(u.minutes) : '—' }}</td>
+                  <td class="num"><strong>{{ u.risk | number: '1.0-0' }}</strong></td>
                 </tr>
               }
             </tbody>
           </table>
         </div>
-      </section>
-
-      <section class="card" style="margin-top: 14px">
-        <h2>Alerts in range ({{ r.alerts.length }})</h2>
-        @if (r.alerts.length) {
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Unit</th><th>Type</th><th>Severity</th><th>Started (UTC)</th><th class="num">Minutes</th><th class="num">Peak &deg;C</th></tr></thead>
-              <tbody>
-                @for (a of r.alerts; track a.start_ts + a.device_id) {
-                  <tr>
-                    <td>{{ a.unit_name }}</td><td>{{ a.kind }}</td>
-                    <td><span class="pill" [class]="a.severity">{{ a.severity }}</span></td>
-                    <td>{{ fmt(a.start_ts) }}</td><td class="num">{{ a.minutes }}</td><td class="num">{{ a.peak_temp_c | number: '1.1-1' }}</td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        } @else {
-          <p class="subtle">No alerts in this range.</p>
-        }
-      </section>
-
-      <section class="card" style="margin-top: 14px">
-        <h2>Business impact in range</h2>
-        @if (r.impact.length) {
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Unit</th><th class="num">Day</th><th>Categories</th><th class="num">Spoilage prob.</th><th class="num">Sales exposed</th><th class="num">Revenue at risk</th></tr></thead>
-              <tbody>
-                @for (i of r.impact; track i.device_id + i.relative_day) {
-                  <tr>
-                    <td>{{ i.unit_name }}</td><td class="num">{{ i.relative_day }}</td><td>{{ i.categories }}</td>
-                    <td class="num">{{ i.spoilage_probability * 100 | number: '1.0-0' }}%</td>
-                    <td class="num">{{ i.sales_exposed | number: '1.2-2' }}</td>
-                    <td class="num"><strong>{{ i.revenue_at_risk | number: '1.2-2' }}</strong></td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-          <p style="margin-top: 10px"><strong>Total revenue at risk: {{ r.total_revenue_at_risk | number: '1.2-2' }}</strong></p>
-        } @else {
-          <p class="subtle">No impact events in this range.</p>
-        }
+        <p class="subtle small" style="margin: 12px 0 0">The PDF also lists every alert and the day-by-day cost breakdown.</p>
       </section>
     }
   `,
-  styles: [`input[type="datetime-local"] { font: inherit; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; }`],
+  styles: [`
+    .controls { display: flex; flex-wrap: wrap; gap: 16px 20px; align-items: flex-end; }
+    .controls label, .units { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--muted); font-weight: 500; }
+    .lbl { font-size: 12.5px; }
+    .actions { margin-left: auto; }
+    button.toggle { min-height: 30px; padding: 3px 11px; border-radius: 999px; font-size: 13px; color: var(--muted); }
+    button.toggle.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  `],
 })
 export class ReportsPage implements OnInit {
   private api = inject(ApiService);
@@ -126,6 +92,44 @@ export class ReportsPage implements OnInit {
   downloading = signal(false);
   error = signal<string | null>(null);
 
+  /** One line per unit: what the PDF says in full, condensed. */
+  rows = computed(() => {
+    const r = this.report();
+    if (!r) return [];
+    return r.units.map((u) => {
+      const alerts = r.alerts.filter((a) => a.device_id === u.device_id);
+      const impact = r.impact.filter((i) => i.device_id === u.device_id);
+      return {
+        device_id: u.device_id,
+        unit_name: u.unit_name,
+        trust: u.avg_trust,
+        critical: alerts.filter((a) => a.severity === 'critical').length,
+        warning: alerts.filter((a) => a.severity === 'warning').length,
+        watch: alerts.filter((a) => a.severity === 'watch').length,
+        minutes: alerts.filter((a) => a.kind !== 'isolation_forest').reduce((s, a) => s + a.minutes, 0),
+        risk: impact.reduce((s, i) => s + i.revenue_at_risk, 0),
+      };
+    });
+  });
+
+  avgTrust(r: Report) {
+    const u = r.units.filter((x) => x.avg_trust !== null);
+    const w = u.reduce((s, x) => s + x.windows, 0);
+    return w ? u.reduce((s, x) => s + (x.avg_trust ?? 0) * x.windows, 0) / w : null;
+  }
+
+  countSev(r: Report, sev: string) {
+    return r.alerts.filter((a) => a.severity === sev).length;
+  }
+
+  totalMinutes(r: Report) {
+    return r.alerts.filter((a) => a.kind !== 'isolation_forest').reduce((s, a) => s + a.minutes, 0);
+  }
+
+  hours(m: number) {
+    return m < 60 ? `${m} min` : `${(m / 60).toFixed(m < 600 ? 1 : 0)} h`;
+  }
+
   ngOnInit() {
     this.api.units().subscribe({
       next: (u) => {
@@ -133,7 +137,7 @@ export class ReportsPage implements OnInit {
         this.selected.set(new Set(u.map((x) => x.device_id)));
         this.preview();
       },
-      error: () => this.error.set('Cannot reach the API at localhost:8000. Start the backend (see README).'),
+      error: () => this.error.set('Could not load units. Check the connection and refresh.'),
     });
   }
 

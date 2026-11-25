@@ -34,10 +34,7 @@ function blankForm() {
     <div class="page-head">
       <div>
         <h1>Devices</h1>
-        <p class="subtle">
-          Register a live probe so it may push readings. An unregistered device is refused at the ingestion API and logged as a
-          security event. Administrator only.
-        </p>
+        <p class="subtle">Temperature probes allowed to send data. Unregistered devices are blocked.</p>
       </div>
     </div>
 
@@ -45,11 +42,11 @@ function blankForm() {
     @if (notice(); as n) { <div class="notice" role="status">{{ n }}</div> }
 
     <section class="card">
-      <h2>Registered live units</h2>
+      <h2>Registered probes</h2>
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Device ID</th><th>Unit</th><th>Site</th><th>Safe band</th><th>Warm-up</th><th>Readings</th><th>Last reading (UTC)</th><th>Monitoring</th></tr>
+            <tr><th>Device ID</th><th>Unit</th><th>Site</th><th>Safe range</th><th>Warm-up</th><th class="num">Readings</th><th>Last reading</th><th></th></tr>
           </thead>
           <tbody>
             @for (u of units(); track u.device_id) {
@@ -77,16 +74,16 @@ function blankForm() {
                   }
                 </td>
                 <td>{{ u.warmup_min }} min</td>
-                <td>{{ u.readings }}</td>
+                <td class="num">{{ u.readings }}</td>
                 <td>
-                  @if (u.last_reading) { {{ fmt(u.last_reading) }} } @else { <span class="pill no_data">Awaiting first reading</span> }
+                  @if (u.last_reading) { {{ fmt(u.last_reading) }} } @else { <span class="pill no_data">Waiting</span> }
                 </td>
                 <td>
                   <button (click)="toggleMonitored(u)">{{ u.monitored ? 'Pause' : 'Resume' }}</button>
                 </td>
               </tr>
             } @empty {
-              <tr><td colspan="8" class="subtle">No live units registered yet. Use the form below for the first probe.</td></tr>
+              <tr><td colspan="8" class="empty">No probes yet. Register the first one below.</td></tr>
             }
           </tbody>
         </table>
@@ -95,10 +92,7 @@ function blankForm() {
 
     <section class="card" style="margin-top: 14px">
       <h2>Register a probe</h2>
-      <p class="subtle">
-        The device ID is built as SITE-UNIT-ZONE. The zone sets which data-quality thresholds apply, so pick the compartment the probe
-        actually sits in. The probe must send exactly this ID with its readings.
-      </p>
+      <p class="subtle">The probe must send exactly the device ID shown below.</p>
       <form class="register" (ngSubmit)="register()">
         <label>Site code <input [(ngModel)]="form.site_id" name="site_id" placeholder="LIVE" required maxlength="12" /></label>
         <label>Unit number <input [(ngModel)]="form.unit" name="unit" placeholder="001" required maxlength="12" /></label>
@@ -117,14 +111,13 @@ function blankForm() {
         <div class="wide row">
           <span class="subtle">Device ID: <code>{{ deviceId() || '—' }}</code></span>
           <span class="spacer"></span>
-          <button type="submit" class="primary" [disabled]="saving()">{{ saving() ? 'Registering...' : 'Register probe' }}</button>
+          <button type="submit" class="primary" [disabled]="saving()">{{ saving() ? 'Registering…' : 'Register probe' }}</button>
         </div>
       </form>
     </section>
   `,
   styles: [
     `
-      input, select { font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }
       .register { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-top: 10px; }
       .register label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
       .register .wide { grid-column: 1 / -1; }
@@ -199,7 +192,7 @@ export class DevicesPage implements OnInit {
     this.api.registerUnit(req).subscribe({
       next: (u) => {
         this.saving.set(false);
-        this.notice.set(`${u.device_id} registered. It appears on Real-Time Monitoring and goes live with its first reading.`);
+        this.notice.set(`${u.device_id} registered. It goes live on Monitoring with its first reading.`);
         this.form = blankForm();
         this.load();
       },
@@ -227,7 +220,7 @@ export class DevicesPage implements OnInit {
       .subscribe({
         next: () => {
           this.editing.set(null);
-          this.notice.set(`Limits for ${u.device_id} updated. The change is recorded in the audit log.`);
+          this.notice.set(`Limits for ${u.device_id} updated.`);
           this.load();
         },
         error: (err) => this.error.set(this.message(err, 'Could not update the limits.')),

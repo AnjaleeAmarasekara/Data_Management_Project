@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { ApiService, AppUser, AuditEntry } from '../shared/api.service';
@@ -11,76 +11,107 @@ import { fmtTs } from '../shared/format';
   template: `
     <div class="page-head">
       <div>
-        <h1>User Management</h1>
-        <p class="subtle">Create accounts and assign roles. Administrator only.</p>
+        <h1>Users</h1>
+        <p class="subtle">Manage who can sign in and what they can do.</p>
       </div>
+      @if (tab() === 'accounts') {
+        <button class="primary" (click)="adding.set(!adding())">{{ adding() ? 'Cancel' : 'Add user' }}</button>
+      }
     </div>
 
     @if (error(); as e) { <div class="notice error" role="alert">{{ e }}</div> }
 
-    <section class="card">
-      <h2>Accounts</h2>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>
-            @for (u of users(); track u.id) {
-              <tr>
-                <td>{{ u.full_name }}</td>
-                <td>{{ u.email }}</td>
-                <td>
-                  <select (change)="changeRole(u, $any($event.target).value)" [disabled]="u.id === me()?.id">
-                    @for (r of roles; track r) { <option [value]="r" [selected]="r === u.role">{{ roleLabel(r) }}</option> }
-                  </select>
-                </td>
-                <td><span class="pill" [class]="u.is_active ? 'ok' : 'neutral'">{{ u.is_active ? 'Active' : 'Disabled' }}</span></td>
-                <td>
-                  <button (click)="toggleActive(u)" [disabled]="u.id === me()?.id">{{ u.is_active ? 'Disable' : 'Enable' }}</button>
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <div class="tabs" role="tablist">
+      <button role="tab" [class.on]="tab() === 'accounts'" (click)="tab.set('accounts')">Accounts</button>
+      <button role="tab" [class.on]="tab() === 'activity'" (click)="tab.set('activity')">Activity log</button>
+    </div>
 
-    <section class="card" style="margin-top: 14px">
-      <h2>Add account</h2>
-      <form class="row" (ngSubmit)="create()">
-        <input placeholder="Full name" [(ngModel)]="form.full_name" name="full_name" required />
-        <input placeholder="Email" type="email" [(ngModel)]="form.email" name="email" required />
-        <select [(ngModel)]="form.role" name="role">
-          @for (r of roles; track r) { <option [value]="r">{{ roleLabel(r) }}</option> }
-        </select>
-        <input placeholder="Temporary password" type="text" [(ngModel)]="form.password" name="password" required />
-        <button type="submit" class="primary" [disabled]="creating()">{{ creating() ? 'Creating...' : 'Create account' }}</button>
-      </form>
-    </section>
+    @if (tab() === 'accounts') {
+      @if (adding()) {
+        <section class="card" style="margin-bottom: 16px">
+          <h2>New user</h2>
+          <form class="add" (ngSubmit)="create()">
+            <input placeholder="Full name" [(ngModel)]="form.full_name" name="full_name" required />
+            <input placeholder="Email" type="email" [(ngModel)]="form.email" name="email" required />
+            <select [(ngModel)]="form.role" name="role">
+              @for (r of roles; track r) { <option [value]="r">{{ roleLabel(r) }}</option> }
+            </select>
+            <input placeholder="Temporary password" type="text" [(ngModel)]="form.password" name="password" required />
+            <button type="submit" class="primary" [disabled]="creating()">{{ creating() ? 'Creating…' : 'Create' }}</button>
+          </form>
+        </section>
+      }
 
-    <section class="card" style="margin-top: 14px">
-      <h2>Audit log</h2>
-      <p class="subtle">Who did what: logins (including failed attempts), account and role changes, alert acknowledgements and fault-injection demo runs. Most recent first.</p>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>When (UTC)</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead>
-          <tbody>
-            @for (a of audit(); track a.id) {
-              <tr>
-                <td>{{ fmt(a.occurred_at) }}</td>
-                <td>{{ a.actor || '—' }}</td>
-                <td><span class="pill" [class]="actionClass(a.action)">{{ a.action }}</span></td>
-                <td>{{ a.target || '—' }}</td>
-                <td class="subtle">{{ a.detail || '' }}</td>
-              </tr>
-            } @empty {
-              <tr><td colspan="5" class="subtle">No activity recorded yet.</td></tr>
-            }
-          </tbody>
-        </table>
-      </div>
-    </section>
+      <section class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Role</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              @for (u of users(); track u.id) {
+                <tr>
+                  <td>
+                    <div class="person">
+                      <span class="avatar">{{ initials(u.full_name) }}</span>
+                      <div><strong>{{ u.full_name }}</strong><div class="subtle small">{{ u.email }}</div></div>
+                    </div>
+                  </td>
+                  <td>
+                    <select (change)="changeRole(u, $any($event.target).value)" [disabled]="u.id === me()?.id" aria-label="Role">
+                      @for (r of roles; track r) { <option [value]="r" [selected]="r === u.role">{{ roleLabel(r) }}</option> }
+                    </select>
+                  </td>
+                  <td><span class="pill" [class]="u.is_active ? 'ok' : 'neutral'">{{ u.is_active ? 'Active' : 'Disabled' }}</span></td>
+                  <td class="num">
+                    @if (u.id === me()?.id) { <span class="subtle small">You</span> }
+                    @else { <button (click)="toggleActive(u)">{{ u.is_active ? 'Disable' : 'Enable' }}</button> }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+
+    @if (tab() === 'activity') {
+      <section class="card">
+        <div class="row" style="margin-bottom: 12px">
+          <label class="row small subtle" style="gap: 6px"><input type="checkbox" [checked]="hideLogins()" (change)="hideLogins.set(!hideLogins()); page.set(0)" /> Hide sign-ins</label>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>When</th><th>Who</th><th>What</th><th>Details</th></tr></thead>
+            <tbody>
+              @for (a of pageRows(); track a.id) {
+                <tr>
+                  <td class="subtle">{{ fmt(a.occurred_at) }}</td>
+                  <td>{{ a.actor || '—' }}</td>
+                  <td><span class="pill" [class]="actionClass(a.action)">{{ actionText(a.action) }}</span></td>
+                  <td class="subtle">{{ [a.target, a.detail].filter(isText).join(' · ') }}</td>
+                </tr>
+              } @empty {
+                <tr><td colspan="4" class="empty">No activity recorded yet.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        @if (filteredAudit().length > pageSize) {
+          <div class="table-foot">
+            <span>{{ page() * pageSize + 1 }}–{{ min((page() + 1) * pageSize, filteredAudit().length) }} of {{ filteredAudit().length }}</span>
+            <span class="row">
+              <button (click)="page.set(page() - 1)" [disabled]="page() === 0">Previous</button>
+              <button (click)="page.set(page() + 1)" [disabled]="(page() + 1) * pageSize >= filteredAudit().length">Next</button>
+            </span>
+          </div>
+        }
+      </section>
+    }
   `,
-  styles: [`input, select { font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; }`],
+  styles: [`
+    .add { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+    .person { display: flex; align-items: center; gap: 10px; }
+    .avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 650; background: var(--accent-soft); color: var(--accent); flex: none; }
+  `],
 })
 export class UsersPage implements OnInit {
   private api = inject(ApiService);
@@ -94,6 +125,44 @@ export class UsersPage implements OnInit {
   me = this.auth.user;
 
   form = { full_name: '', email: '', role: 'staff' as Role, password: '' };
+  tab = signal<'accounts' | 'activity'>('accounts');
+  adding = signal(false);
+  hideLogins = signal(true);
+  page = signal(0);
+  readonly pageSize = 15;
+  filteredAudit = computed(() => this.audit().filter((a) => !this.hideLogins() || a.action !== 'login_succeeded'));
+  pageRows = computed(() => this.filteredAudit().slice(this.page() * this.pageSize, (this.page() + 1) * this.pageSize));
+
+  min(a: number, b: number) {
+    return Math.min(a, b);
+  }
+
+  isText(v: string | null): v is string {
+    return !!v;
+  }
+
+  initials(name: string) {
+    return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+  }
+
+  actionText(action: string) {
+    const t: Record<string, string> = {
+      login_succeeded: 'Signed in',
+      login_failed: 'Failed sign-in',
+      login_locked: 'Account locked',
+      user_created: 'User added',
+      role_changed: 'Role changed',
+      account_disabled: 'User disabled',
+      account_enabled: 'User enabled',
+      alert_acknowledged: 'Alert acknowledged',
+      demo_run: 'Fault test run',
+      unit_registered: 'Probe registered',
+      unit_limits_changed: 'Limits changed',
+      unit_monitoring_paused: 'Monitoring paused',
+      unit_monitoring_resumed: 'Monitoring resumed',
+    };
+    return t[action] ?? action.replace(/_/g, ' ');
+  }
 
   ngOnInit() {
     this.load();
@@ -135,6 +204,7 @@ export class UsersPage implements OnInit {
     this.api.createUser(this.form).subscribe({
       next: () => {
         this.creating.set(false);
+        this.adding.set(false);
         this.form = { full_name: '', email: '', role: 'staff', password: '' };
         this.load();
       },

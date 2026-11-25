@@ -8,7 +8,7 @@ import { downloadCsv, fmtTs } from '../shared/format';
 
 const BUCKETS: { key: TrendBucket; label: string }[] = [
   { key: 'hour', label: 'Hourly' },
-  { key: '6h', label: '6-hourly' },
+  { key: '6h', label: '6 h' },
   { key: 'day', label: 'Daily' },
 ];
 
@@ -22,128 +22,93 @@ const UNIT_COLOURS = ['#455a64', '#8e5aa6', '#5d8a2f', '#b08900', '#1b8a8a'];
   template: `
     <div class="page-head">
       <div>
-        <h1>Historical Trends</h1>
-        <p class="subtle">
-          How each unit behaved across the whole record, not just the last few hours. Readings the quality
-          layer excluded are left out of every figure here, exactly as they are for analytics.
-        </p>
+        <h1>Trends</h1>
+        <p class="subtle">How each unit has performed over time.</p>
       </div>
-    </div>
-
-    @if (error(); as e) { <div class="notice error" role="alert">{{ e }}</div> }
-
-    <section class="card">
-      <div class="row" style="flex-wrap: wrap; gap: 10px">
-        <div class="seg" role="group" aria-label="Unit">
-          @for (u of units(); track u.device_id) {
-            <button [class.on]="u.device_id === selected()" (click)="select(u.device_id)">{{ u.unit_name }}</button>
-          }
-        </div>
-        <span class="spacer"></span>
+      <div class="row">
+        <select aria-label="Unit" (change)="select($any($event.target).value)">
+          @for (u of units(); track u.device_id) { <option [value]="u.device_id" [selected]="u.device_id === selected()">{{ u.unit_name }}</option> }
+        </select>
         <div class="seg" role="group" aria-label="Granularity">
           @for (b of buckets; track b.key) {
             <button [class.on]="b.key === bucket()" (click)="setBucket(b.key)">{{ b.label }}</button>
           }
         </div>
       </div>
-    </section>
+    </div>
+
+    @if (error(); as e) { <div class="notice error" role="alert">{{ e }}</div> }
 
     @if (data(); as d) {
-      <div class="grid cols-4" style="margin-top: 14px">
-        <div class="card">
-          <div class="kpi-label">Time too warm</div>
-          <div class="big" [style.color]="d.totals.minutes_too_warm ? 'var(--crit)' : null">{{ hours(d.totals.minutes_too_warm) }}</div>
-        </div>
-        <div class="card">
-          <div class="kpi-label">Time too cold</div>
-          <div class="big" [style.color]="d.totals.minutes_too_cold ? 'var(--crit)' : null">{{ hours(d.totals.minutes_too_cold) }}</div>
-        </div>
-        <div class="card">
-          <div class="kpi-label">Data completeness</div>
-          <div class="big">{{ (d.totals.completeness ?? 0) * 100 | number: '1.0-1' }}%</div>
-        </div>
-        <div class="card">
-          <div class="kpi-label">Readings used / excluded</div>
-          <div class="big">{{ d.totals.readings | number }} <span class="subtle" style="font-size: 1rem">/ {{ d.totals.excluded }}</span></div>
-        </div>
+      <div class="stats">
+        <div class="stat"><span class="stat-label">Time too warm</span><span class="stat-value" [class.crit]="d.totals.minutes_too_warm">{{ hours(d.totals.minutes_too_warm) }}</span></div>
+        <div class="stat"><span class="stat-label">Time too cold</span><span class="stat-value" [class.crit]="d.totals.minutes_too_cold">{{ hours(d.totals.minutes_too_cold) }}</span></div>
+        <div class="stat"><span class="stat-label">Data received</span><span class="stat-value">{{ (d.totals.completeness ?? 0) * 100 | number: '1.0-0' }}%</span></div>
+        <div class="stat"><span class="stat-label">Readings</span><span class="stat-value">{{ d.totals.readings | number }}</span><span class="stat-sub">{{ d.totals.excluded }} excluded as unreliable</span></div>
       </div>
 
-      <section class="card" style="margin-top: 14px">
-        <h2>Temperature range per {{ bucketNoun() }}</h2>
-        <p class="subtle">
-          Shaded band: coldest to warmest reading per {{ bucketNoun() }}. Line: the mean. Dashed: the safe band.
-          @if (d.has_product_probe) { Green: the product&rsquo;s own temperature, which lags the air. }
-        </p>
-        @if (tempChart(); as c) { <app-chart [config]="c" [height]="320"></app-chart> }
+      <section class="card">
+        <h2>Temperature</h2>
+        @if (tempChart(); as c) { <app-chart [config]="c" [height]="300"></app-chart> }
       </section>
 
-      <div class="grid cols-2" style="margin-top: 14px">
+      <div class="grid cols-2" style="margin-top: 16px">
         <section class="card">
-          <h2>Time outside the safe band</h2>
-          <p class="subtle">Minutes per {{ bucketNoun() }} spent too warm or too cold.</p>
-          @if (breachChart(); as c) { <app-chart [config]="c" [height]="240"></app-chart> }
+          <h2>Time out of range</h2>
+          @if (breachChart(); as c) { <app-chart [config]="c" [height]="220"></app-chart> }
         </section>
         <section class="card">
-          <h2>Data trust and completeness</h2>
-          <p class="subtle">Mean trust score, and the share of expected readings that actually arrived.</p>
-          @if (trustChart(); as c) { <app-chart [config]="c" [height]="240"></app-chart> }
+          <h2>Data trust</h2>
+          @if (trustChart(); as c) { <app-chart [config]="c" [height]="220"></app-chart> }
         </section>
       </div>
     }
 
     @if (overviewChart(); as c) {
-      <section class="card" style="margin-top: 14px">
-        <h2>All units compared</h2>
-        <p class="subtle">
-          Daily time outside the safe band for every unit, warm and cold together &mdash; the quickest way to see which
-          unit is the chronic problem and whether it is getting better or worse.
-        </p>
-        <app-chart [config]="c" [height]="260"></app-chart>
+      <section class="card" style="margin-top: 16px">
+        <h2>All units: daily time out of range</h2>
+        <app-chart [config]="c" [height]="240"></app-chart>
       </section>
     }
 
     @if (data(); as d) {
-      <section class="card" style="margin-top: 14px">
+      <section class="card" style="margin-top: 16px">
         <div class="row">
-          <h2 style="margin: 0">By {{ bucketNoun() }}</h2>
+          <h2 style="margin: 0">Data table</h2>
           <span class="spacer"></span>
+          <button (click)="showTable.set(!showTable())">{{ showTable() ? 'Hide' : 'Show' }}</button>
           <button (click)="exportCsv()">Export CSV</button>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Period (UTC)</th><th class="num">Min</th><th class="num">Mean</th><th class="num">Max</th>
-                @if (d.has_product_probe) { <th class="num">Product</th> }
-                <th class="num">Ambient</th><th class="num">Too warm (min)</th><th class="num">Too cold (min)</th>
-                <th class="num">Complete</th><th class="num">Trust</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (p of d.points; track p.bucket_start) {
+        @if (showTable()) {
+          <div class="table-wrap" style="margin-top: 12px">
+            <table>
+              <thead>
                 <tr>
-                  <td>{{ label(p.bucket_start) }}</td>
-                  <td class="num">{{ p.temp_min | number: '1.1-1' }}</td>
-                  <td class="num">{{ p.temp_mean | number: '1.1-1' }}</td>
-                  <td class="num">{{ p.temp_max | number: '1.1-1' }}</td>
-                  @if (d.has_product_probe) { <td class="num">{{ p.product_mean | number: '1.1-1' }}</td> }
-                  <td class="num">{{ p.ambient_mean | number: '1.1-1' }}</td>
-                  <td class="num">{{ p.minutes_too_warm }}</td>
-                  <td class="num">{{ p.minutes_too_cold }}</td>
-                  <td class="num">{{ p.completeness * 100 | number: '1.0-0' }}%</td>
-                  <td class="num">{{ p.avg_trust | number: '1.1-1' }}</td>
+                  <th>Period</th><th class="num">Min</th><th class="num">Mean</th><th class="num">Max</th>
+                  @if (d.has_product_probe) { <th class="num">Product</th> }
+                  <th class="num">Room</th><th class="num">Too warm</th><th class="num">Too cold</th>
+                  <th class="num">Data received</th><th class="num">Trust</th>
                 </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="notice info" style="margin-top: 14px">
-        <strong>Why there is no time-of-day pattern here.</strong>
-        The source loggers record elapsed time, not clock time, and the record is anchored to midnight only so it lines up
-        with the sales calendar. A pattern such as "warmest in the afternoon" would be an artefact of that anchor rather
-        than a fact about the shop, so it is not shown.
+              </thead>
+              <tbody>
+                @for (p of d.points; track p.bucket_start) {
+                  <tr>
+                    <td>{{ label(p.bucket_start) }}</td>
+                    <td class="num">{{ p.temp_min | number: '1.1-1' }}</td>
+                    <td class="num">{{ p.temp_mean | number: '1.1-1' }}</td>
+                    <td class="num">{{ p.temp_max | number: '1.1-1' }}</td>
+                    @if (d.has_product_probe) { <td class="num">{{ p.product_mean | number: '1.1-1' }}</td> }
+                    <td class="num">{{ p.ambient_mean | number: '1.1-1' }}</td>
+                    <td class="num">{{ p.minutes_too_warm ? p.minutes_too_warm + ' min' : '—' }}</td>
+                    <td class="num">{{ p.minutes_too_cold ? p.minutes_too_cold + ' min' : '—' }}</td>
+                    <td class="num">{{ p.completeness * 100 | number: '1.0-0' }}%</td>
+                    <td class="num">{{ p.avg_trust | number: '1.0-0' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
       </section>
     }
   `,
@@ -158,6 +123,7 @@ export class TrendsPage implements OnInit {
   data = signal<Trends | null>(null);
   overview = signal<TrendsOverview | null>(null);
   error = signal<string | null>(null);
+  showTable = signal(false);
 
   bucketNoun = computed(() => ({ hour: 'hour', '6h': 'six hours', day: 'day' })[this.bucket()]);
 
@@ -167,7 +133,7 @@ export class TrendsPage implements OnInit {
         this.units.set(u);
         if (u.length) this.select(u[0].device_id);
       },
-      error: () => this.error.set('Cannot reach the API at localhost:8000. Start the backend (see README).'),
+      error: () => this.error.set('Could not load trends. Check the connection and refresh.'),
     });
     this.api.trendsOverview('day').subscribe({ next: (o) => this.overview.set(o), error: () => {} });
   }

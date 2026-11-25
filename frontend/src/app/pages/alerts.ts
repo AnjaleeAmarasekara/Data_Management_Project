@@ -6,11 +6,12 @@ import { AuthService } from '../shared/auth.service';
 import { downloadCsv, fmtTs } from '../shared/format';
 
 const KIND_TEXT: Record<string, string> = {
-  excursion: 'Too warm (safe-limit excursion)',
-  cold_excursion: 'Too cold (freezing risk)',
-  sensor_silent: 'Sensor silent (no data)',
-  isolation_forest: 'Anomaly (early warning)',
+  excursion: 'Too warm',
+  cold_excursion: 'Too cold',
+  sensor_silent: 'Sensor offline',
+  isolation_forest: 'Unusual behaviour',
 };
+const PAGE = 15;
 
 @Component({
   selector: 'app-alerts',
@@ -19,10 +20,7 @@ const KIND_TEXT: Record<string, string> = {
     <div class="page-head">
       <div>
         <h1>Alerts</h1>
-        <p class="subtle">
-          Excursions are confirmed breaches of a unit's safe limit. Early warnings come from an Isolation Forest model that
-          only ever sees quality-filtered data.
-        </p>
+        <p class="subtle">Temperature breaches, offline sensors and early warnings.</p>
       </div>
       @if (auth.hasRole('quality_supervisor')) {
         <button (click)="exportCsv()" [disabled]="!filtered().length">Export CSV</button>
@@ -31,64 +29,82 @@ const KIND_TEXT: Record<string, string> = {
 
     @if (error(); as e) { <div class="notice error" role="alert">{{ e }}</div> }
 
+    <div class="stats">
+      <div class="stat"><span class="stat-label">Open</span><span class="stat-value">{{ open().length }}</span></div>
+      <div class="stat"><span class="stat-label">Critical</span><span class="stat-value crit">{{ countOpen('critical') }}</span></div>
+      <div class="stat"><span class="stat-label">Warning</span><span class="stat-value warn">{{ countOpen('warning') }}</span></div>
+      <div class="stat"><span class="stat-label">Early warnings</span><span class="stat-value">{{ countOpen('watch') }}</span></div>
+    </div>
+
     <section class="card">
       <div class="row" style="margin-bottom: 12px">
-        <label class="row">Severity
-          <select [value]="severity()" (change)="severity.set($any($event.target).value)">
-            <option value="">All</option>
-            <option value="critical">Critical</option>
-            <option value="warning">Warning</option>
-            <option value="watch">Watch</option>
-          </select>
-        </label>
-        <label class="row">Unit
-          <select [value]="unit()" (change)="unit.set($any($event.target).value)">
-            <option value="">All</option>
-            @for (u of unitNames(); track u) { <option [value]="u">{{ u }}</option> }
-          </select>
-        </label>
+        <div class="seg" role="group" aria-label="Status">
+          @for (v of views; track v.key) {
+            <button [class.on]="view() === v.key" (click)="setView(v.key)">{{ v.label }}</button>
+          }
+        </div>
         <span class="spacer"></span>
-        <span class="subtle">{{ filtered().length }} of {{ alerts().length }} alerts</span>
+        <select aria-label="Severity" [value]="severity()" (change)="severity.set($any($event.target).value); page.set(0)">
+          <option value="">All severities</option>
+          <option value="critical">Critical</option>
+          <option value="warning">Warning</option>
+          <option value="watch">Early warning</option>
+        </select>
+        <select aria-label="Unit" [value]="unit()" (change)="unit.set($any($event.target).value); page.set(0)">
+          <option value="">All units</option>
+          @for (u of unitNames(); track u) { <option [value]="u">{{ u }}</option> }
+        </select>
       </div>
 
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Severity</th><th>Unit</th><th>Type</th><th>Started (UTC)</th>
-              <th class="num">Duration (min)</th><th class="num">Extreme (&deg;C)</th><th class="num">Data trust</th>
-              @if (auth.hasRole('quality_supervisor')) { <th>Acknowledgement</th> }
+              <th>Severity</th><th>Unit</th><th>Issue</th><th>Started</th>
+              <th class="num">Duration</th><th class="num">Peak</th>
+              @if (auth.hasRole('quality_supervisor')) { <th></th> }
             </tr>
           </thead>
           <tbody>
-            @for (a of filtered(); track a.id) {
+            @for (a of pageRows(); track a.id) {
               <tr>
-                <td><span class="pill" [class]="a.severity">{{ a.severity }}</span></td>
-                <td>{{ a.unit_name }}</td>
+                <td><span class="pill" [class]="a.severity">{{ a.severity === 'watch' ? 'Early warning' : a.severity }}</span></td>
+                <td><strong class="unit">{{ a.unit_name }}</strong></td>
                 <td>{{ kindText(a.kind) }}</td>
-                <td>{{ fmt(a.start_ts) }}</td>
-                <td class="num">{{ a.minutes }}</td>
-                <td class="num">{{ a.peak_temp_c | number: '1.1-1' }}</td>
-                <td class="num">{{ a.avg_trust === null ? '-' : (a.avg_trust | number: '1.1-1') }}</td>
+                <td class="subtle">{{ fmt(a.start_ts) }}</td>
+                <td class="num">{{ duration(a.minutes) }}</td>
+                <td class="num">{{ a.peak_temp_c | number: '1.1-1' }}&deg;C</td>
                 @if (auth.hasRole('quality_supervisor')) {
-                  <td>
+                  <td class="num">
                     @if (a.acknowledged) {
-                      <span class="pill ok">Acknowledged</span>
-                      <span class="subtle"> by {{ a.acknowledged_by }}</span>
+                      <span class="subtle small" [title]="'Acknowledged by ' + a.acknowledged_by">&#10003; {{ a.acknowledged_by }}</span>
                     } @else {
-                      <button (click)="acknowledge(a)" [disabled]="acking() === a.id">{{ acking() === a.id ? 'Saving...' : 'Acknowledge' }}</button>
+                      <button (click)="acknowledge(a)" [disabled]="acking() === a.id">{{ acking() === a.id ? 'Saving…' : 'Acknowledge' }}</button>
                     }
                   </td>
                 }
               </tr>
             } @empty {
-              <tr><td colspan="8" class="subtle">No alerts match.</td></tr>
+              <tr><td colspan="7" class="empty">{{ view() === 'open' ? 'No open alerts. All clear.' : 'No alerts match.' }}</td></tr>
             }
           </tbody>
         </table>
       </div>
+
+      @if (filtered().length > pageSize) {
+        <div class="table-foot">
+          <span>{{ page() * pageSize + 1 }}–{{ min((page() + 1) * pageSize, filtered().length) }} of {{ filtered().length }}</span>
+          <span class="row">
+            <button (click)="page.set(page() - 1)" [disabled]="page() === 0">Previous</button>
+            <button (click)="page.set(page() + 1)" [disabled]="(page() + 1) * pageSize >= filtered().length">Next</button>
+          </span>
+        </div>
+      }
     </section>
   `,
+  styles: [`
+    .unit { font-weight: 600; }
+  `],
 })
 export class AlertsPage implements OnInit {
   private api = inject(ApiService);
@@ -98,11 +114,45 @@ export class AlertsPage implements OnInit {
   severity = signal('');
   unit = signal('');
   acking = signal<number | null>(null);
+  view = signal<'open' | 'done' | 'all'>('open');
+  page = signal(0);
+  readonly pageSize = PAGE;
+  readonly views = [
+    { key: 'open' as const, label: 'Open' },
+    { key: 'done' as const, label: 'Acknowledged' },
+    { key: 'all' as const, label: 'All' },
+  ];
 
   unitNames = computed(() => [...new Set(this.alerts().map((a) => a.unit_name))].sort());
+  open = computed(() => this.alerts().filter((a) => !a.acknowledged));
   filtered = computed(() =>
-    this.alerts().filter((a) => (!this.severity() || a.severity === this.severity()) && (!this.unit() || a.unit_name === this.unit())),
+    this.alerts().filter(
+      (a) =>
+        (this.view() === 'all' || (this.view() === 'open') === !a.acknowledged) &&
+        (!this.severity() || a.severity === this.severity()) &&
+        (!this.unit() || a.unit_name === this.unit()),
+    ),
   );
+  pageRows = computed(() => this.filtered().slice(this.page() * PAGE, (this.page() + 1) * PAGE));
+
+  setView(v: 'open' | 'done' | 'all') {
+    this.view.set(v);
+    this.page.set(0);
+  }
+
+  countOpen(severity: string) {
+    return this.open().filter((a) => a.severity === severity).length;
+  }
+
+  min(a: number, b: number) {
+    return Math.min(a, b);
+  }
+
+  duration(m: number) {
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60);
+    return m % 60 ? `${h} h ${m % 60} min` : `${h} h`;
+  }
 
   ngOnInit() {
     this.load();
@@ -111,7 +161,7 @@ export class AlertsPage implements OnInit {
   load() {
     this.api.alerts(500).subscribe({
       next: (a) => this.alerts.set(a),
-      error: () => this.error.set('Cannot reach the API at localhost:8000. Start the backend (see README).'),
+      error: () => this.error.set('Could not load alerts. Check the connection and refresh.'),
     });
   }
 

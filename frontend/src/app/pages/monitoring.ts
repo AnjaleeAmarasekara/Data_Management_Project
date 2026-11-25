@@ -27,18 +27,28 @@ const RANGES = [
   template: `
     <div class="page-head">
       <div>
-        <h1>Real-Time Monitoring</h1>
-        <p class="subtle">Latest state of each cold-storage unit, with the data-quality trust score behind every number.</p>
+        <h1>Monitoring</h1>
+        <p class="subtle">Live status of every fridge and freezer.</p>
       </div>
-      <div class="row subtle" aria-live="polite">
-        <span class="pill" [class.ok]="!error()" [class.critical]="error()">{{ error() ? 'Offline' : 'Live' }}</span>
-        @if (updated(); as u) { <span>Updated {{ u.toLocaleTimeString() }}</span> }
+      <div class="row subtle small" aria-live="polite">
+        <span class="live-dot" [class.off]="error()"></span>
+        {{ error() ? 'Offline' : 'Live' }}
+        @if (updated(); as u) { <span>&middot; updated {{ u.toLocaleTimeString() }}</span> }
       </div>
     </div>
 
     @if (error(); as e) { <div class="notice error" role="alert">{{ e }}</div> }
 
-    <div class="grid cols-3" style="margin-top: 14px">
+    @if (units().length) {
+      <div class="stats">
+        <div class="stat"><span class="stat-label">Units</span><span class="stat-value">{{ units().length }}</span></div>
+        <div class="stat"><span class="stat-label">Normal</span><span class="stat-value ok">{{ count('ok') }}</span></div>
+        <div class="stat"><span class="stat-label">Needs attention</span><span class="stat-value warn">{{ count('warning') + count('warming_up') + count('no_data') }}</span></div>
+        <div class="stat"><span class="stat-label">Critical</span><span class="stat-value crit">{{ count('critical') }}</span></div>
+      </div>
+    }
+
+    <div class="grid cols-units">
       @for (u of units(); track u.device_id) {
         <article
           class="card unit"
@@ -49,84 +59,38 @@ const RANGES = [
           (click)="select(u.device_id)"
           (keydown.enter)="select(u.device_id)"
           [attr.aria-label]="'Show chart for ' + u.unit_name"
+          [title]="u.categories.join(', ')"
         >
-          <div class="row">
-            <strong>{{ u.unit_name }}</strong>
+          <div class="row nowrap">
+            <span class="unit-name">{{ u.unit_name }}</span>
             <span class="spacer"></span>
             <span class="pill" [class]="u.status">{{ statusText(u.status) }}</span>
           </div>
-          @if (u.clock === 'wall') {
-            <p class="live-tag" title="Silence is judged against the real clock, not against the replayed record">Live probe &middot; {{ u.device_id }}</p>
-          }
-
-          @if (u.status === 'no_data') {
-            <p class="subtle meta" style="margin-top: 10px">
-              Registered. No reading has arrived yet; the card goes live with the probe's first push.
-            </p>
-          }
+          @if (u.clock === 'wall') { <p class="live-tag">Live probe &middot; {{ u.device_id }}</p> }
 
           @if (u.latest; as l) {
-            <div class="row" style="align-items: baseline; margin: 10px 0 2px">
+            <div class="reading">
               <span class="big">{{ l.temp_c | number: '1.1-1' }}&deg;C</span>
-              @if (l.humidity !== null) { <span class="subtle">{{ l.humidity | number: '1.0-0' }}% RH</span> }
+              @if (l.humidity !== null) { <span class="subtle small">{{ l.humidity | number: '1.0-0' }}% RH</span> }
             </div>
-            <p class="subtle meta">
-              Setpoint {{ u.setpoint_c }}&deg;C &middot; safe band
-              @if (u.min_safe_c !== null && u.min_safe_c !== undefined) { {{ u.min_safe_c }}&deg;C to }
-              {{ u.max_safe_c }}&deg;C
+            <p class="subtle small band">
+              @if (u.min_safe_c !== null && u.min_safe_c !== undefined) { Safe {{ u.min_safe_c }} to {{ u.max_safe_c }}&deg;C } @else { Safe up to {{ u.max_safe_c }}&deg;C }
             </p>
-            <p class="cats">{{ u.categories.join(', ') }}</p>
-            @if (u.breach === 'too_warm') {
-              <div class="breach">
-                <strong>{{ outsideBandBy(u) | number: '1.1-1' }}&deg;C above the safe limit</strong>
-                <span>Spoilage risk grows with time spent above it.</span>
-              </div>
-            }
-            @if (u.breach === 'too_cold') {
-              <div class="breach">
-                <strong>{{ outsideBandBy(u) | number: '1.1-1' }}&deg;C below the safe band</strong>
-                <span>Chilled stock can freeze and be ruined.</span>
-              </div>
-            }
-            @if (u.warmup; as w) {
-              <div class="settling">
-                <strong>Settling: {{ w.remaining_min | number: '1.0-0' }} of {{ w.warmup_min }} min left</strong>
-                <span>A newly fitted probe starts at room temperature. Safe limits are enforced once it has settled; silence is reported straight away.</span>
-              </div>
-            }
-            @if (u.breach === 'silent') {
-              <div class="breach">
-                <strong>No readings for {{ u.connectivity?.silent_for_min | number: '1.0-0' }} min</strong>
-                <span>The rest of this premises is reporting, so the sensor or its battery has likely failed. The temperature shown is the last one received.</span>
-              </div>
-            }
-            @if (u.breach === 'premises_silent') {
-              <div class="breach">
-                <strong>Whole premises silent for {{ u.connectivity?.premises_silent_for_min | number: '1.0-0' }} min</strong>
-                <span>Check the gateway, network or power. The temperature shown is the last one received.</span>
-              </div>
-            }
+          } @else {
+            <p class="subtle small band" style="margin-top: 14px">Waiting for the first reading.</p>
           }
 
-          @if (u.trust; as t) {
-            <div class="trust">
-              <div class="row">
-                <span class="kpi-label">Data trust</span>
-                <span class="spacer"></span>
-                <strong>{{ t.value | number: '1.1-1' }}</strong><span class="subtle">/ 100</span>
-                <span class="pill" [class]="t.label">{{ t.label }}</span>
-              </div>
-              <div class="meter" role="img" [attr.aria-label]="'Trust score ' + t.value + ' out of 100'">
-                <div class="meter-fill" [class]="t.label" [style.width.%]="t.value"></div>
-              </div>
-              <div>
-                @for (f of activeFlags(t.flags); track f) { <span class="chip">{{ f }}</span> }
-                @empty { <span class="chip clear">No quality issues</span> }
-              </div>
-            </div>
-          }
+          @if (issue(u); as i) { <div class="issue" [class]="i.tone">{{ i.text }}</div> }
 
-          @if (forecastText(u); as fc) { <p class="subtle forecast">{{ fc }}</p> }
+          <div class="foot">
+            @if (u.trust; as t) {
+              <span class="subtle small">Data trust</span>
+              <span class="trust-val" [class]="t.label">{{ t.value | number: '1.0-0' }}</span>
+              @for (f of activeFlags(t.flags); track f) { <span class="chip">{{ f }}</span> }
+            } @else {
+              <span class="subtle small">Data trust not scored yet</span>
+            }
+          </div>
         </article>
       } @empty {
         @if (!error()) {
@@ -137,15 +101,13 @@ const RANGES = [
       }
     </div>
 
-    <section class="card" style="margin-top: 14px">
-      <div class="row" style="margin-bottom: 10px">
-        <h2 style="margin: 0">Temperature history</h2>
+    <section class="card" style="margin-top: 16px">
+      <div class="row" style="margin-bottom: 12px">
+        <h2 style="margin: 0">Temperature &middot; {{ selectedName() }}</h2>
         <span class="spacer"></span>
-        <div class="seg" role="group" aria-label="Unit">
-          @for (u of units(); track u.device_id) {
-            <button [class.on]="u.device_id === selected()" (click)="select(u.device_id)">{{ u.unit_name }}</button>
-          }
-        </div>
+        <select aria-label="Unit" [value]="selected()" (change)="select($any($event.target).value)">
+          @for (u of units(); track u.device_id) { <option [value]="u.device_id" [selected]="u.device_id === selected()">{{ u.unit_name }}</option> }
+        </select>
         <div class="seg" role="group" aria-label="Time range">
           @for (r of ranges; track r.hours) {
             <button [class.on]="r.hours === hours()" (click)="setHours(r.hours)">{{ r.label }}</button>
@@ -153,27 +115,23 @@ const RANGES = [
         </div>
       </div>
       @if (chart(); as c) {
-        <app-chart [config]="c" [height]="320" />
-        <p class="subtle" style="margin-top: 8px">
-          Red markers are readings the data quality layer flagged as outliers or noise. They are excluded from
-          analytics rather than plotted into the line. Temperatures are measured refrigeration readings, not simulated.
-        </p>
+        <app-chart [config]="c" [height]="300" />
       } @else {
-        <p class="subtle">No readings to show.</p>
+        <p class="subtle">No readings in this period.</p>
       }
     </section>
 
-    <section class="card" style="margin-top: 14px">
-      <div class="row" style="margin-bottom: 8px">
-        <h2 style="margin: 0">Latest alerts</h2>
+    <section class="card" style="margin-top: 16px">
+      <div class="row" style="margin-bottom: 6px">
+        <h2 style="margin: 0">Recent alerts</h2>
         <span class="spacer"></span>
-        <a routerLink="/alerts">All alerts</a>
+        <a class="link" routerLink="/alerts">View all</a>
       </div>
       @for (a of alerts(); track a.id) {
         <div class="alert-line">
           <span class="pill" [class]="a.severity">{{ a.severity }}</span>
-          <span><strong>{{ a.unit_name }}</strong> &mdash; {{ a.message }}</span>
-          <span class="subtle">{{ fmt(a.start_ts) }}</span>
+          <span class="alert-text"><strong>{{ a.unit_name }}</strong><span class="subtle"> &middot; {{ alertText(a) }}</span></span>
+          <span class="subtle small">{{ fmt(a.start_ts) }}</span>
         </div>
       } @empty {
         <p class="subtle">No alerts.</p>
@@ -181,21 +139,29 @@ const RANGES = [
     </section>
   `,
   styles: [`
-    .unit { cursor: pointer; transition: box-shadow 160ms var(--ease), border-color 160ms var(--ease), transform 160ms var(--ease); }
+    .cols-units { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+    .unit { cursor: pointer; display: flex; flex-direction: column; padding: 16px; transition: box-shadow 160ms var(--ease), border-color 160ms var(--ease), transform 160ms var(--ease); }
     .unit:hover { box-shadow: var(--shadow-raised); transform: translateY(-1px); }
-    .unit.is-critical { border-color: #efc4be; }
-    .unit.is-warning { border-color: #ebd5a3; }
-    .unit.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
+    .unit.is-critical { box-shadow: inset 0 3px 0 var(--crit), var(--shadow); }
+    .unit.is-warning { box-shadow: inset 0 3px 0 #d99a0b, var(--shadow); }
+    .unit.selected { border-color: var(--accent); }
     .unit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .trust { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
-    .meter { height: 6px; background: var(--border); border-radius: 4px; overflow: hidden; }
-    .meter-fill { height: 100%; }
-    .meter-fill.High { background: var(--ok); }
-    .meter-fill.Medium { background: #d99a0b; }
-    .meter-fill.Low { background: var(--crit); }
-    .forecast { margin: 10px 0 0; }
-    .alert-line { display: grid; grid-template-columns: 76px 1fr auto; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); }
+    .unit-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+    .reading { display: flex; align-items: baseline; gap: 8px; margin: 12px 0 0; }
+    .band { margin: 2px 0 0; }
+    .issue { margin-top: 10px; padding: 6px 10px; border-radius: 7px; font-size: 12.5px; font-weight: 600; }
+    .issue.crit { background: var(--crit-bg); color: var(--crit); }
+    .issue.warn { background: var(--warn-bg); color: var(--warn); }
+    .issue.info { background: var(--watch-bg); color: var(--watch); }
+    .foot { margin-top: auto; padding-top: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .foot .chip { margin: 0; }
+    .trust-val { font-weight: 650; font-variant-numeric: tabular-nums; }
+    .trust-val.High { color: var(--ok); }
+    .trust-val.Medium { color: var(--warn); }
+    .trust-val.Low { color: var(--crit); }
+    .alert-line { display: grid; grid-template-columns: 84px 1fr auto; gap: 12px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); }
     .alert-line:last-child { border-bottom: 0; }
+    .alert-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   `],
 })
 export class MonitoringPage implements OnInit, OnDestroy {
@@ -252,6 +218,39 @@ export class MonitoringPage implements OnInit, OnDestroy {
     return null;
   }
 
+  count(status: string) {
+    return this.units().filter((u) => u.status === status).length;
+  }
+
+  selectedName() {
+    return this.units().find((u) => u.device_id === this.selected())?.unit_name ?? '';
+  }
+
+  /** One short line saying what is wrong, or nothing when the unit is fine.
+   *  The forecast wording stays hedged ("trending"): the walk-forward backtest does not support
+   *  stating a breach time as fact (docs/ml_evaluation_arima.json). */
+  issue(u: UnitState): { text: string; tone: 'crit' | 'warn' | 'info' } | null {
+    const by = this.outsideBandBy(u);
+    const c = u.connectivity;
+    switch (u.breach) {
+      case 'too_warm': return { text: `${by?.toFixed(1)}°C above the safe limit`, tone: 'crit' };
+      case 'too_cold': return { text: `${by?.toFixed(1)}°C below the safe limit`, tone: 'crit' };
+      case 'silent': return { text: `No readings for ${Math.round(c?.silent_for_min ?? 0)} min`, tone: 'crit' };
+      case 'premises_silent': return { text: `Site offline for ${Math.round(c?.premises_silent_for_min ?? 0)} min`, tone: 'crit' };
+    }
+    if (u.warmup) return { text: `Settling in, ${Math.round(u.warmup.remaining_min)} min left`, tone: 'info' };
+    const f = u.forecast;
+    if (f?.status === 'at_risk' && f.minutes_to_limit) {
+      return { text: `Trending ${f.direction === 'cold' ? 'too cold' : 'too warm'}, ~${Math.round(f.minutes_to_limit)} min to limit`, tone: 'warn' };
+    }
+    return null;
+  }
+
+  /** The alert message without its trailing explanation ("... - chilled stock can freeze"). */
+  alertText(a: Alert) {
+    return a.message.split(' - ')[0];
+  }
+
   statusText(s: string) {
     return STATUS_TEXT[s] ?? s;
   }
@@ -266,32 +265,9 @@ export class MonitoringPage implements OnInit, OnDestroy {
       ['outlier', 'Outliers'],
       ['drift', 'Drift'],
       ['noise', 'Noise'],
-      ['integrity', 'Integrity (possible tampering)'],
+      ['integrity', 'Possible tampering'],
     ];
     return names.filter(([k]) => f[k]).map(([, label]) => label);
-  }
-
-  // Wording is deliberately hedged. The walk-forward backtest (docs/ml_evaluation_arima.json)
-  // shows the forecast beats a naive "no change" baseline on three of five units, and anticipated
-  // four of fifteen excursions that began from a within-limit state. That does not support stating
-  // a predicted breach time as fact, so the text reads as a watch signal, not a promise.
-  //
-  // Returns empty for a unit already outside its band: the breach line above the trust score
-  // already says so, with the magnitude, and a forecast slot repeating it reads like a second,
-  // weaker finding rather than the same one.
-  forecastText(u: UnitState): string {
-    const f = u.forecast;
-    // a probe that has not reported, or is still settling, has its own message above
-    if (u.status === 'no_data' || u.status === 'warming_up') return '';
-    if (!f || f.status === 'insufficient_data') return 'Forecast unavailable (not enough recent data).';
-    if (f.minutes_to_limit === 0) return '';
-    if (f.status === 'at_risk') {
-      const towards = f.direction === 'cold' ? 'freezing (the lower limit)' : 'the safe limit';
-      return `Trending towards ${towards} — on current trend it could be reached within ${Math.round(
-        f.minutes_to_limit ?? 0,
-      )} min. Indicative only.`;
-    }
-    return `No breach indicated in the next ${f.horizon_min} min (trend points to ${f.predicted_c}°C).`;
   }
 
   private loadUnits() {
@@ -302,7 +278,7 @@ export class MonitoringPage implements OnInit, OnDestroy {
         this.updated.set(new Date());
         if (!this.selected() && units.length) this.select(units[0].device_id);
       },
-      error: () => this.error.set('Cannot reach the API at localhost:8000. Start the backend (see README) and this page will reconnect.'),
+      error: () => this.error.set('Connection lost. Reconnecting automatically.'),
     });
   }
 
@@ -330,22 +306,22 @@ function buildChart(r: Readings, hours: number): ChartConfiguration {
       labels,
       datasets: [
         { label: 'Temperature (°C)', data: r.points.map((p) => p.temp_c), borderColor: '#0f766e', backgroundColor: '#0f766e', borderWidth: 1.6, pointRadius: 0, tension: 0.15 },
-        { label: `Safe limit (${r.max_safe_c}°C)`, data: r.points.map(() => r.max_safe_c ?? null), borderColor: '#b3261e', borderDash: [6, 4], borderWidth: 1.2, pointRadius: 0 },
+        { label: `Upper limit (${r.max_safe_c}°C)`, data: r.points.map(() => r.max_safe_c ?? null), borderColor: '#b3261e', borderDash: [6, 4], borderWidth: 1.2, pointRadius: 0 },
         // the lower bound matters too: below it, chilled stock freezes
         ...(r.min_safe_c !== null && r.min_safe_c !== undefined
           ? [{ label: `Lower limit (${r.min_safe_c}°C)`, data: r.points.map(() => r.min_safe_c ?? null), borderColor: '#2b6cb0', borderDash: [2, 4], borderWidth: 1.2, pointRadius: 0 }]
           : []),
-        { label: 'Flagged by quality layer', data: flagged, showLine: false, borderColor: '#b3261e', backgroundColor: '#b3261e', pointStyle: 'triangle', pointRadius: 5 },
+        { label: 'Flagged reading', data: flagged, showLine: false, borderColor: '#b3261e', backgroundColor: '#b3261e', pointStyle: 'triangle', pointRadius: 5 },
       ],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { position: 'top', align: 'end' } },
+      plugins: { legend: { position: 'top', align: 'end', labels: { boxWidth: 14, boxHeight: 2 } } },
       scales: {
         x: { ticks: { maxTicksLimit: 10, autoSkip: true }, grid: { display: false } },
-        y: { title: { display: true, text: '°C' } },
+        y: { title: { display: true, text: '°C' }, grid: { color: '#eef2f3' } },
       },
     },
   };
